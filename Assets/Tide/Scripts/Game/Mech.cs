@@ -13,7 +13,7 @@ namespace Tide
         static readonly string[] KEY_COL = { "ffc530", "c9d3e3" };      // 第几对钥匙锁：金色 / 银色
         const float SHARK_YAW = 0;                                        // 鲨鱼模型朝向修正（度）
 
-        // 钥匙、挂锁用圆牌（和问号船、船坞数字一样，永远朝着屏幕）：3D 钥匙转到侧面只剩一条线，放在黄船上也看不清
+        // 钥匙、挂锁用圆牌（和船坞数字一样，永远朝着屏幕）：3D 钥匙转到侧面只剩一条线，放在黄船上也看不清
         class MechV { public GameObject weed, chain; public Label n, keyL, lockL; public int shown = -1; }
         MechV[] mechV = new MechV[0];
         readonly List<(Transform g, int k)> sharkV = new List<(Transform, int)>();
@@ -26,7 +26,7 @@ namespace Tide
             mechV = new MechV[L.boats.Count]; sharkV.Clear();
             for (int k = 0; k < L.sharks.Count; k++)
             {
-                var g = Art.Spawn("shark", world, false).transform; g.localScale = Vector3.one * 1.5f;
+                var g = Art.Spawn("shark", world, false).transform; g.localScale = Vector3.one * 1.5f * lay.gs;
                 sharkV.Add((g, k));
             }
             SharkTick(0);
@@ -154,7 +154,7 @@ namespace Tide
                 var S = L.sharks[k]; double t = st != null ? st.t : 0;
                 Rules.SharkUV(L, S, t, out double u, out double v); Rules.UVtoXZ(L, u, v, out double x, out double z);
                 Rules.SharkUV(L, S, t + 0.05, out double u2, out double v2); Rules.UVtoXZ(L, u2, v2, out double x2, out double z2);
-                var pos = W(x, z); var dir = W(x2, z2) - pos;
+                var pos = G(x, z); var dir = G(x2, z2) - pos;
                 g.position = new Vector3(pos.x, Mathf.Sin(Fx.Now / 260) * 0.02f, pos.z);
                 if (dir.sqrMagnitude > 1e-6f) g.rotation = Quaternion.Slerp(g.rotation, Quaternion.Euler(0, YawOf(dir) * Mathf.Rad2Deg + SHARK_YAW - 90, 0), Mathf.Min(1, dt * 8 + (dt == 0 ? 1 : 0)));
                 if (dt > 0 && Fx.Now % 90 < 17) Wake(g.position - dir.normalized * 0.4f);
@@ -167,7 +167,7 @@ namespace Tide
             if (k < 0 || k >= sharkV.Count || !sharkV[k].g) return;
             var g = sharkV[k].g; sfx.Play("bad", 0.7f); Haptics.Play(Haptics.Kind.Medium);
             Splash(g.position, 8, 1.6f);
-            Fx.Run(() => Fx.Tween(300, p => { if (g) g.localScale = Vector3.one * 1.5f * (1 + 0.4f * Mathf.Sin(p * Mathf.PI)); }));
+            Fx.Run(() => Fx.Tween(300, p => { if (g) g.localScale = Vector3.one * 1.5f * lay.gs * (1 + 0.4f * Mathf.Sin(p * Mathf.PI)); }));
         }
 
         // 点了走不了的船：说清楚为什么

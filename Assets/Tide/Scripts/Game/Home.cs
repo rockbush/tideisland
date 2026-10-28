@@ -244,9 +244,9 @@ namespace Tide
             var f = new Folk { yaw = UnityEngine.Random.value * 6.28f, wait = UnityEngine.Random.value * 2 };
             f.g = new GameObject("folk").transform; f.g.SetParent(homeRoot, false);
             var body = new GameObject("body"); body.transform.SetParent(f.g, false); f.body = body.transform;
-            int v = UnityEngine.Random.Range(0, Art.GUYS.Length);
+            int v = (k * 3 + UnityEngine.Random.Range(0, 8)) % COLS.Length;   // 头饰跟着颜色走
             body.AddComponent<MeshFilter>().sharedMesh = Art.Guy(v).mesh;
-            body.AddComponent<MeshRenderer>().sharedMaterials = Art.GuyMats(v, COLS[(k * 3 + UnityEngine.Random.Range(0, 8)) % COLS.Length]);
+            body.AddComponent<MeshRenderer>().sharedMaterials = Art.GuyMats(v, COLS[v]);
             f.g.localScale = Vector3.one * 0.8f;
             var p = pts[UnityEngine.Random.Range(0, pts.Count)] + new Vector3((UnityEngine.Random.value - 0.5f) * 0.8f, 0, (UnityEngine.Random.value - 0.5f) * 0.8f);
             p.y = HomeGround(p); f.g.position = p; f.to = p;

@@ -41,7 +41,7 @@ namespace Tide
             { "航母", "Carrier" }, { "航母最长，一次能装 <b>10 个人</b>！", "The carrier is the longest boat. It takes <b>10 people</b> at once!" },
             { "礁石", "Rocks" }, { "礁石挡路，永远不会动。", "Rocks block the way and never move." },
             { "船坞", "Boathouse" }, { "船坞里还停着船\n<b>门口的船开走了</b>\n下一艘才出来\n屋顶数字 = 里面还剩几艘", "More boats wait inside. <b>When the boat at the door leaves</b>, the next one comes out.\nThe number on the roof = boats left inside." },
-            { "问号船", "Mystery boat" }, { "看不出颜色的船：<b>船头前面的路一通</b>，就露出颜色。", "You can't see its color until <b>the way in front of it is clear</b>." },
+            { "神秘白船", "Mystery boat" }, { "白色的船看不出是什么颜色：<b>船头前面的路一通</b>，就露出颜色。", "A white boat hides its color until <b>the way in front of it is clear</b>." },
             { "知道了", "Got it" }, { "新机制！", "New!" },
             // ---- 营地 ----
             { "篝火", "Campfire" }, { "营地的第一样东西", "The first thing every camp needs" },

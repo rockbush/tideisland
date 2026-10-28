@@ -1,12 +1,14 @@
 // 卡通描边（反面外扩）：同一个模型再画一遍，只画背面，顶点沿法线往外推固定的屏幕像素宽。
 // 宽度 = _Width（以 390x844 的界面为准的像素）× _TideOutlinePx（Game.cs 按屏幕高度设，屏幕越大线越粗，看起来一样）。
 // 用的网格是 Art.OutlineMesh 做过的：同一位置的顶点法线取平均，硬边那里线才不会断开。
+// _Push：描边整体往镜头后面推多远（世界单位）。推到模型后面，描边就只在背景上露出一圈，帽檐 / 细腿的描边不会盖到自己脸上、身上（队头白边用）
 Shader "Tide/Outline"
 {
     Properties
     {
         _Color ("Color", Color) = (0.15, 0.1, 0.06, 1)
         _Width ("Width (px @844)", Float) = 1.5
+        _Push ("Push back (world)", Float) = 0
     }
     SubShader
     {
@@ -28,6 +30,7 @@ Shader "Tide/Outline"
             CBUFFER_START(UnityPerMaterial)
                 half4 _Color;
                 float _Width;
+                float _Push;
             CBUFFER_END
             float _TideOutlinePx;
 
@@ -38,7 +41,8 @@ Shader "Tide/Outline"
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(i);
-                float4 c = TransformObjectToHClip(i.positionOS.xyz);
+                float3 vs = TransformWorldToView(TransformObjectToWorld(i.positionOS.xyz)); vs.z -= _Push;   // 观察空间里镜头看向 -Z
+                float4 c = TransformWViewToHClip(vs);
                 float3 nCS = TransformWorldToHClipDir(TransformObjectToWorldNormal(i.normalOS));
                 float2 d = nCS.xy;
                 float len = length(d);

@@ -64,7 +64,7 @@ namespace Tide
         void SetFlood(float d)
         {
             if (!flood) return;
-            float far = lay.zQ2 - 0.45f, len = Mathf.Max(0.01f, (lay.zP - 0.15f - far) * d);
+            float far = lay.zQ2 - QLG / 2 - 0.2f, len = Mathf.Max(0.01f, (lay.zP - 0.15f - far) * d);
             float w = 2 * lay.xQ + 3;
             flood.position = W(0, lay.zP - 0.15f - len / 2, 0.27f);
             flood.localScale = new Vector3(w, len, 1);

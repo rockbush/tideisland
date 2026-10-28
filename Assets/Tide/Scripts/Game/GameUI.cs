@@ -23,7 +23,7 @@ namespace Tide
             { "carrier", new[] { "航母", "航母最长，一次能装 <b>10 个人</b>！" } },
             { "rock", new[] { "礁石", "礁石挡路，永远不会动。" } },
             { "house", new[] { "船坞", "船坞里还停着船\n<b>门口的船开走了</b>\n下一艘才出来\n屋顶数字 = 里面还剩几艘" } },
-            { "mys", new[] { "问号船", "看不出颜色的船：<b>船头前面的路一通</b>，就露出颜色。" } },
+            { "mys", new[] { "神秘白船", "白色的船看不出是什么颜色：<b>船头前面的路一通</b>，就露出颜色。" } },
             { "weed", new[] { "海藻缠船", "船被<b>海藻缠住</b>了，先开别的船\n数字 = 还要先开走几艘\n到 0 海藻就松开" } },
             { "lock", new[] { "钥匙和锁链", "被<b>锁链</b>锁住的船开不走\n先把<b>挂着同色钥匙</b>的船开走\n锁就打开了" } },
             { "shark", new[] { "鲨鱼", "鲨鱼在港湾边上<b>来回游</b>\n船正撞上它，会被吓回来\n<b>看准时机</b>再点！" } },
@@ -147,20 +147,21 @@ namespace Tide
             StormUI(root);
 
             // ---- 底部三个道具（照概念图：奶白圆盘 + 金边，里面是图标，右上角一个圆角标）----
+            // 10-28 草图：按钮缩小（直径 92 → 70），三个分得更开，给上面的港湾让地方
             ui.boost = UIKit.Rect("boost", H).Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 8), new Vector2(370, 100));
             string[] ic = { "↑", "≡", "+" }, col = { "ffd76a", "a8ea7c", "8fd4ff" }, icon = { "ai_heli", "ai_horn", "ai_dock" };
             for (int k = 0; k < 3; k++)
             {
                 RectTransform b;
                 string disc = Skin.Has("disc_booster_g") ? "disc_booster_g" : "disc_booster";   // 10-23 用户：边框换成和上面草地一样的绿（签到、小岛那几处还是金边）
-                if (Skin.Has(disc)) { b = Skin.Img(ui.boost, disc).rectTransform; b.name = "bb" + k; b.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2((k - 1) * 120, 2), new Vector2(92, 92)); }
+                if (Skin.Has(disc)) { b = Skin.Img(ui.boost, disc).rectTransform; b.name = "bb" + k; b.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2((k - 1) * 124, 2), new Vector2(70, 70)); }
                 else b = UIKit.Disc(ui.boost, "bb" + k, UIKit.Hex(col[k]), 5).Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2((k - 1) * 116, 4), new Vector2(76, 76));
-                if (Deco(icon[k])) DecoImg(b, icon[k], new Vector2(0.5f, 0.5f), new Vector2(0, 2), 70);
+                if (Deco(icon[k])) DecoImg(b, icon[k], new Vector2(0.5f, 0.5f), new Vector2(0, 2), 54);
                 else UIKit.Txt(b, "ic", ic[k], k == 2 ? 40 : 34, UIKit.Brown).rectTransform.Stretch(0, 2, 0, 0);
-                var badge = UIKit.Rect("cnt", b).Place(new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-10, -10), new Vector2(36, 36));
+                var badge = UIKit.Rect("cnt", b).Place(new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(-7, -7), new Vector2(30, 30));
                 ui.cntBg[k] = Skin.Has("ball_white") ? Skin.Img(badge, "ball_white") : UIKit.Img(badge, "bg", UIKit.Circle, UIKit.Green);
                 ui.cntBg[k].rectTransform.Stretch();
-                ui.cnt[k] = UIKit.Txt(badge, "n", "", 14, Color.white); ui.cnt[k].rectTransform.Stretch(-6, 2, -6, 0);
+                ui.cnt[k] = UIKit.Txt(badge, "n", "", 13, Color.white); ui.cnt[k].rectTransform.Stretch(-6, 2, -6, 0);
                 Styled(ui.cnt[k], new Color(0, 0, 0, 0.5f), 1.3f, 0);
                 ui.cntIc[k] = UIKit.Img(badge, "ic", null, Color.white); ui.cntIc[k].preserveAspect = true; ui.cntIc[k].gameObject.SetActive(false);
                 ui.bb[k] = b;
@@ -564,7 +565,9 @@ namespace Tide
                 lb.root.anchoredPosition = ToCanvas(sp);
                 // 跟着镜头远近缩放：一格（1 米）在屏幕上 44 个界面单位时是原大
                 float ppu = Vector3.Distance(sp, cam.WorldToScreenPoint(wp + cam.transform.right)) / Mathf.Max(0.01f, ui.scale);
-                lb.root.localScale = Vector3.one * Mathf.Clamp(ppu / 44f, 0.35f, 1.15f);
+                // 挂在船、礁石、船坞上的标签再跟着它缩（网格缩小的关，船上的人数数字跟船一起变小，不会撑出船身）
+                float own = lb.follow ? Mathf.Clamp(lb.anchor.lossyScale.x, 0.3f, 1) : 1;
+                lb.root.localScale = Vector3.one * Mathf.Clamp(ppu / 44f, 0.35f, 1.15f) * own;
                 bool vis = !lb.hide && sp.z > 0 && (!lb.follow || (lb.anchor.gameObject.activeInHierarchy && lb.anchor.lossyScale.x > 0.05f));   // 船开局是一艘艘弹出来的：还没长出来的船不显示数字
                 if (lb.root.gameObject.activeSelf != vis) lb.root.gameObject.SetActive(vis);
             }
@@ -674,7 +677,6 @@ namespace Tide
                 var bg = UIKit.Img(fr, "bg", UIKit.Round, UIKit.Hex("cfeefa")); bg.rectTransform.anchorMin = bg.rectTransform.anchorMax = new Vector2(0.5f, 0.5f); bg.rectTransform.sizeDelta = new Vector2(220, 150);
                 if (pic.StartsWith("ai_") && !Deco(pic)) pic = "card_" + k;      // 还没有 AI 图就用 Blender 那张
                 var im = DecoImg(fr, pic.StartsWith("ai_") ? pic : pic.Replace("deco_", "").Replace("card_", "card:"), new Vector2(0.5f, 0.5f), Vector2.zero, 150);
-                if (k == "mys") { var q = UIKit.Disc(fr, "q", UIKit.Cream, 3).Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(40, 34), new Vector2(44, 44)); UIKit.Txt(q, "t", "?", 28, UIKit.Ink).rectTransform.Stretch(0, 2, 0, 0); }
                 Fx.Run(() => Fx.Tween(900, p => { if (im) im.rectTransform.localScale = Vector3.one * (1 + 0.06f * Mathf.Sin(p * Mathf.PI * 2)); }));
             }
             MText(T(CARD[k][0]), 28, UIKit.Brown);

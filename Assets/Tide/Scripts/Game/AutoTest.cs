@@ -64,15 +64,15 @@ namespace Tide
             {
                 LoadLevel(i); await Fx.SleepKeep(60); FitCam(); PlaceCam(true);
                 float Pt(Vector3 a, Vector3 b) => Vector3.Distance(cam.WorldToScreenPoint(a), cam.WorldToScreenPoint(b)) / ui.scale;
-                float far = Pt(W(-0.5f, lay.z0 + 0.5f), W(0.5f, lay.z0 + 0.5f)), near = Pt(W(-0.5f, lay.z1 - 0.5f), W(0.5f, lay.z1 - 0.5f));
+                float hg = 0.5f * lay.gs, far = Pt(W(-hg, lay.z0 + hg), W(hg, lay.z0 + hg)), near = Pt(W(-hg, lay.z1 - hg), W(hg, lay.z1 - hg));
                 float guy = Pt(W(0, lay.zQ1, 0.25f), W(0, lay.zQ1, 0.25f + 0.8f * GS));
                 float berth = Pt(W(BX(0) - BW / 2, lay.zP), W(BX(0) + BW / 2, lay.zP));
                 // 点每艘船的中心和两头（各往里 0.3 格），看是不是选中它自己
                 foreach (var u in boatV)
                 {
                     if (u == null || u.state != "lot") continue;
-                    var hm = BoatHome(u.b); var d = DirU(u.b); float half = (L.boats[u.b].len - 0.16f) / 2;
-                    foreach (float o in new[] { 0f, half - 0.3f, -(half - 0.3f) })
+                    var hm = BoatHome(u.b); var d = DirU(u.b); float half = (L.boats[u.b].len - 0.16f) / 2 * lay.gs;
+                    foreach (float o in new[] { 0f, half - 0.3f * lay.gs, -(half - 0.3f * lay.gs) })
                     {
                         tapTotal++;
                         if (PickBoat(cam.WorldToScreenPoint(hm.pos + d * o + Vector3.up * 0.25f)) != u.b) tapMiss++;

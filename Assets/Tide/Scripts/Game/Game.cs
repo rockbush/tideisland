@@ -13,7 +13,13 @@ namespace Tide
     {
         public static Game I;
         // ---- 常量（和网页版一致）----
-        const float BW = 1.1f, DEEP = 2.3f, QSP = 0.34f, QLG = 1.0f, GS = 0.8f;   // QLG：排队通道两道之间的距离（0.52 用户嫌挤→0.75→再宽点 1.0）
+        const float BW = 1.1f, DEEP = 2.3f;
+        // 10-28 用户草图：画面分成固定的几块（顶栏 / 排队区 15.6~37% / 码头 / 港湾 49~89.6% / 道具），每关都一样大，不再按网格大小取景。
+        // 港湾固定 REG_W × REG_H 米，网格按关卡缩放（lay.gs）塞进去；排队区比原来深一倍多（道距 1.0 → 2.3），人、栏杆跟着放大 QS 倍
+        const float REG_W = 8f, REG_H = 10.04f, GS_MAX = 1.1f, QS = 1.6f, HSC = 1.3f;   // HSC：出人小屋放大倍数
+        // 10-28 用户：队伍里能看到 50 人左右。房子右移、左栏杆外扩，通道总长 ≈ 27.3，人距 0.55 → 50 人；
+        // 人 1.4 倍（新模型头比老的大 15%，看上去和上一版差不多大），人挨人站、帽檐之间留一点缝
+        const float QSP = 0.55f, QLG = 2.3f, GS = 1.4f;   // QLG：排队通道两道之间的距离（0.52 用户嫌挤→0.75→1.0→10-28 草图 2.3）
         // 镜头偏离正上方的角度（弧度）：0.6 ≈ 俯角 56°，能看到船身侧面（奶油色腰带、舷窗），像标题界面那艘船；原来 0.4（67°）几乎是正俯视
         const float PHI = 0.6f;
         const int MAXB = 7, NAD = 2;
@@ -23,6 +29,7 @@ namespace Tide
         static float BX(int k) => (k - (MAXB - 1) / 2f) * BW;
         static float BSC(int len) => Mathf.Min(0.86f, 2.2f / (len - 0.16f));
         static Vector3 W(double x, double z, float y = 0) => new Vector3((float)x, y, -(float)z);
+        Vector3 G(double x, double z, float y = 0) => W(x * lay.gs, z * lay.gs, y);   // 网格坐标（Rules.CellXZ 那套）→ 世界：网格中心在原点，按 gs 缩放
         static float YawOf(Vector3 d) => Mathf.Atan2(d.x, d.z);     // Unity 里的朝向角（弧度），0 = +Z
 
         // 每种船：箭头 [尾 z, 头 z, 箭头半宽, 杆半宽, 箭头长, 高度]，模型名
@@ -48,7 +55,7 @@ namespace Tide
 
         class Lay
         {
-            public float x0, x1, z0, z1, zCh, zP, zQ1, zQ2, xQ, xl, xr, zb; public int VIS;
+            public float x0, x1, z0, z1, zCh, zP, zQ1, zQ2, xQ, xl, xr, zb, gs = 1; public int VIS;   // x0..z1：网格缩放以后在世界里的范围；gs：网格缩放
             public float xT, hx, hz, qLen; public Vector2 door; public List<Vector2> path = new List<Vector2>();   // 排队通道：拐弯处 x、小屋中心、路径（队头 → 门口）
         }
         Lay lay = new Lay();
@@ -61,7 +68,7 @@ namespace Tide
             public Task arrive; public GameObject[] arrows; public Transform[] seats; public List<GameObject> seatM = new List<GameObject>();
             public Label q; public Collider col; public List<MeshRenderer> ol; public List<Guy> dashG = new List<Guy>();
         }
-        class Guy { public GameObject g; public Transform body; public int c, slot, v; public float ph, walk, yaw; public MeshRenderer r, ol; public string dbg = ""; }
+        class Guy { public GameObject g; public Transform body; public int c, slot, v; public float ph, walk, yaw, s; public MeshRenderer r, ol; public string dbg = ""; }
         class Gate { public TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>(); public Task p => tcs.Task; public int owner = -1; public string stage = ""; }   // owner/stage：排查卡死用
 
         BoatV[] boatV = new BoatV[0];
@@ -176,7 +183,7 @@ namespace Tide
             for (int k = 0; k < Mathf.Min(lay.VIS, st.q.Count); k++)
             {
                 var g = MakeGuy(st.q[k]); var p = QPos(k);
-                g.g.transform.position = W(p.x, p.z, 0.25f); g.yaw = YawOf(new Vector3(p.fx, 0, -p.fz)); g.slot = k;
+                g.g.transform.position = W(p.x, p.z, 0.25f); g.yaw = YawOf(new Vector3(p.fx, 0, -p.fz)); g.slot = k; g.s = SlotS(k);
                 g.g.transform.localScale = Vector3.one * 0.001f; qGuys.Add(g);
             }
             HouseCount();
@@ -225,18 +232,22 @@ namespace Tide
                     Rules.CellXZ(L, i, out double x, out double z);
                     x0 = Mathf.Min(x0, (float)x - e); x1 = Mathf.Max(x1, (float)x + e); z0 = Mathf.Min(z0, (float)z - e); z1 = Mathf.Max(z1, (float)z + e);
                 }
-            lay = new Lay { x0 = x0 - 0.2f, x1 = x1 + 0.2f, z0 = z0 - 0.2f, z1 = z1 + 0.2f };
-            lay.zCh = lay.z0 - 0.65f;
-            lay.zP = lay.zCh - 0.5f - DEEP;
-            lay.zQ1 = lay.zP - 1.15f; lay.zQ2 = lay.zQ1 - 2 * QLG;   // zQ1 = 最靠码头那道（队头在它左端），zQ2 = 最里面那道
-            lay.xQ = Mathf.Max(4, Mathf.Min(5.5f, (lay.x1 - lay.x0) / 2));
-            lay.xl = lay.x0 - 0.7f; lay.xr = lay.x1 + 0.7f; lay.zb = lay.z1 + 0.7f;
+            x0 -= 0.2f; x1 += 0.2f; z0 -= 0.2f; z1 += 0.2f;
+            // 网格（中心在原点）缩放到塞得进固定的港湾；小关最多放大到 GS_MAX
+            float gs = Mathf.Min(GS_MAX, (REG_W - 0.3f) / (x1 - x0), (REG_H - 0.3f) / (z1 - z0));
+            lay = new Lay { gs = gs, x0 = x0 * gs, x1 = x1 * gs, z0 = z0 * gs, z1 = z1 * gs };
+            // 下面这些都是固定的，和关卡无关（数值由草图比例反算：scratchpad lay2.js）
+            lay.zP = -REG_H / 2 - 1.0f - DEEP;           // 码头前沿：港湾上沿往上 1 米航道 + 泊位
+            lay.zCh = lay.zP + DEEP + 0.5f;             // 航道：泊位口外面
+            lay.zQ1 = lay.zP - 0.6f - QLG / 2; lay.zQ2 = lay.zQ1 - 2 * QLG;   // zQ1 = 最靠码头那道（队头在它左端），zQ2 = 最里面那道
+            lay.xQ = 5.3f - 0.3f * QS;                  // 左边栏杆在 x = -5.3（10-28 为了排 50 人从 -4.8 外扩，屏幕 ≈ 6%）
+            lay.xl = lay.x0 - 0.7f * gs; lay.xr = lay.x1 + 0.7f * gs; lay.zb = lay.z1 + 0.7f * gs;
             // 景区那种来回折的通道（2026-10-22 用户画的草图）：第 1 道从队头往右 → 拐进第 2 道往左 → 拐进第 3 道往右 →
             // 直通右上角小屋的侧门。人从侧门一个接一个走出来，小屋前的牌子是屋里还剩多少人
             // （2026-10-22 门从小屋正面挪到左侧墙：原来第 3 道走到头还要拐到屋前，队尾的人站在屋外）
-            lay.hx = lay.xQ - 0.6f; lay.hz = lay.zQ2;                    // 小屋中心：侧门正对第 3 道
-            lay.xT = lay.xQ - 2.2f;                                      // 第 1、2 道右头拐弯处
-            lay.door = new Vector2(lay.hx - HOUSE_HW - 0.12f, lay.zQ2);  // 侧门门槛：队尾最后一个人站这儿
+            lay.hx = 3.45f + HOUSE_HW * HSC; lay.hz = lay.zQ2;           // 小屋中心：侧门正对第 3 道；左墙在 x = 3.45（草图 72% → 10-28 右移到 ≈ 79%）
+            lay.xT = 2.5f;                                               // 第 1、2 道右头拐弯处（10-28 从 1.89 右移；再往右连击牌就没地方放了）
+            lay.door = new Vector2(lay.hx - HOUSE_HW * HSC - 0.12f * QS, lay.zQ2);  // 侧门门槛：队尾最后一个人站这儿
             float zB = lay.zQ1 - QLG;
             lay.path = new List<Vector2> { new Vector2(-lay.xQ, lay.zQ1), new Vector2(lay.xT, lay.zQ1), new Vector2(lay.xT, zB), new Vector2(-lay.xQ, zB),
                 new Vector2(-lay.xQ, lay.zQ2), lay.door };
@@ -261,6 +272,21 @@ namespace Tide
             }
             return new QP { x = lay.door.x, z = lay.door.y, fx = -1, fz = 0 };
         }
+        // 沿通道量 s 米处的点（10-28 用户：点得快的时候人直线奔向新位置，会穿过栏杆 → 一律沿通道走）
+        // s 超过通道总长 = 还在侧门里面：门槛 → 屋里那一段是直线
+        Vector2 Inside => new Vector2(lay.hx - 0.3f, lay.door.y);
+        float PathEnd => lay.qLen + Vector2.Distance(lay.door, Inside);
+        float SlotS(int k) => Mathf.Min(k * QSP, lay.qLen);   // 和 QPos 一样：排不下的都站在门口
+        Vector2 PathAt(float s)
+        {
+            for (int i = 1; i < lay.path.Count; i++)
+            {
+                Vector2 a = lay.path[i - 1], b = lay.path[i]; float d = Vector2.Distance(a, b);
+                if (s <= d) return Vector2.Lerp(a, b, Mathf.Max(0, s) / d);
+                s -= d;
+            }
+            return Vector2.MoveTowards(lay.door, Inside, s);
+        }
         Vector3 BerthPos(int k, int len) => W(BX(k), lay.zP + 0.1f + (len - 0.16f) * BSC(len) / 2);
 
         GameObject Add(string model, Vector3 pos, float yawDeg, bool boatFrame, float scale = 1)
@@ -276,11 +302,11 @@ namespace Tide
             if (world) Destroy(world.gameObject);
             world = new GameObject("World").transform;
             parts.Clear();
-            float W0 = lay.x1 - lay.x0, Hh = lay.z1 - lay.z0, cx = (lay.x0 + lay.x1) / 2, cz = (lay.z0 + lay.z1) / 2;
-            // 港湾：浅一点的水（四周原来有一圈红白浮球和四个角的黄浮标，用户要画面干净，去掉了；存档"海上复杂版本"里还有）
+            // 港湾：浅一点的水，固定大小（10-28 草图：每关一样大，网格缩放后摆在正中）
+            //（四周原来有一圈红白浮球和四个角的黄浮标，用户要画面干净，去掉了；存档"海上复杂版本"里还有）
             var lag = GameObject.CreatePrimitive(PrimitiveType.Quad); Destroy(lag.GetComponent<Collider>());
-            lag.transform.SetParent(world); lag.transform.position = W(cx, cz, 0.0f); lag.transform.rotation = Quaternion.Euler(90, 0, 0);
-            lag.transform.localScale = new Vector3(W0 + 0.5f, Hh + 0.5f, 1);
+            lag.transform.SetParent(world); lag.transform.position = W(0, 0, 0.0f); lag.transform.rotation = Quaternion.Euler(90, 0, 0);
+            lag.transform.localScale = new Vector3(REG_W, REG_H, 1);
             lag.GetComponent<MeshRenderer>().sharedMaterial = Art.UnlitMat(UIKit.Hex("8fe3ef", 0.55f), true);
             // 礁石、船坞
             houseV.Clear();
@@ -289,13 +315,13 @@ namespace Tide
                 if (L.ins[i] != 2) continue;
                 Rules.CellXZ(L, i, out double x, out double z);
                 var r = new Rng(i + 3);
-                Add(i % 2 == 0 ? "rock_a" : "rock_b", W(x, z), (float)r.Next() * 360, false, 0.95f);
+                Add(i % 2 == 0 ? "rock_a" : "rock_b", G(x, z), (float)r.Next() * 360, false, 0.95f * lay.gs);
             }
             for (int h = 0; h < L.houses.Count; h++)
             {
                 var H = L.houses[h];
                 Rules.CellXZ(L, H.cell, out double x, out double z); Rules.DirXZ(L, H.d, out double dx, out double dz);
-                var g = Add("boathouse", W(x, z), YawOf(W(dx, dz)) * Mathf.Rad2Deg, true, 1.05f);
+                var g = Add("boathouse", G(x, z), YawOf(W(dx, dz)) * Mathf.Rad2Deg, true, 1.05f * lay.gs);
                 var n = NewLabel(g.transform, new Vector3(0, 1.3f, 0), H.list.Count.ToString(), UIKit.Cream, 20, 30);
                 houseV.Add((g, n));
             }
@@ -365,7 +391,7 @@ namespace Tide
             var col = g.AddComponent<BoxCollider>();
             col.center = new Vector3(0, 0.3f, 0); col.size = new Vector3(0.86f, 0.6f, B.len - 0.12f);
             u.col = col;
-            if (hidden) u.q = NewLabel(g.transform, new Vector3(0, 0.9f, 0), "?", UIKit.Hex("fff8e6"), 24, 32);
+            // 白船头上原来顶一个"?"圆牌；10-28 用户：不用打问号，白色就够了，第一次出现时弹卡片介绍（ShowCard "mys"）
             var h = BoatHome(b);
             g.transform.position = h.pos; u.yaw = h.yaw; g.transform.rotation = Quaternion.Euler(0, u.yaw * Mathf.Rad2Deg, 0);
             if (fresh) g.transform.localScale = Vector3.one * 0.001f;
@@ -388,15 +414,15 @@ namespace Tide
             if (B.cells.Length == 0) return (W(-14, lay.zCh + 0.2f), YawOf(W(1, 0)));   // 送的彩虹船：不在港湾里，从左边海上开进来（Special.cs）
             foreach (int j in B.cells) { Rules.CellXZ(L, j, out double cx, out double cz); x += cx; z += cz; }
             Rules.DirXZ(L, B.d, out double dx, out double dz);
-            return (W(x / B.cells.Length, z / B.cells.Length), YawOf(W(dx, dz)));
+            return (G(x / B.cells.Length, z / B.cells.Length), YawOf(W(dx, dz)));
         }
         Vector3 DirU(int b) { Rules.DirXZ(L, L.boats[b].d, out double dx, out double dz); return W(dx, dz); }
 
         // ---- 小人 ----
         Guy MakeGuy(int c)
         {
-            // 三种发型随机（刘海 / 小揪 / 鸭舌帽），头发和衣服是队伍色
-            var u = new Guy { c = c, ph = UnityEngine.Random.value * 6.28f, v = UnityEngine.Random.Range(0, Art.GUYS.Length) };
+            // 头饰跟着颜色走（v = c），帽子和衣服是队伍色
+            var u = new Guy { c = c, ph = UnityEngine.Random.value * 6.28f, v = c };
             u.g = new GameObject("guy"); u.g.transform.SetParent(world, false);
             var body = new GameObject("body"); body.transform.SetParent(u.g.transform, false);
             u.body = body.transform;
@@ -407,7 +433,13 @@ namespace Tide
             return u;
         }
         static Material GuyOutline(int c) => Art.OutlineMat(Art.OutlineColor(Art.Lit(UIKit.Hex(COLS[c]))), 1.2f);
-        void RecolorGuy(Guy g, int c) { g.c = c; g.r.sharedMaterials = Art.GuyMats(g.v, COLS[c]); if (g.ol) g.ol.sharedMaterial = GuyOutline(c); }
+        void RecolorGuy(Guy g, int c)   // 换颜色 = 换人（头饰也跟着换）；队头那个换成没右手的模型，白描边一起换
+        {
+            g.c = c; g.v = c; bool head = g == headGuy;
+            GuyMesh(g, (head ? Art.GuyW(c) : Art.Guy(c)).mesh);
+            if (head) HeadRimMesh(g);
+            g.r.sharedMaterials = Art.GuyMats(c, COLS[c]); if (g.ol) g.ol.sharedMaterial = GuyOutline(c);
+        }
 
         // ======================================================================
         async Task IntroFx()
@@ -417,7 +449,7 @@ namespace Tide
             for (int k = 0; k < list.Count; k++)
             {
                 var g = list[k].g; int kk = k;
-                Fx.Run(async () => { await Fx.Sleep(kk * 14); if (t != tok) return; await Fx.Tween(260, p => g.transform.localScale = Vector3.one * Mathf.Max(0.001f, Fx.BackOut(p))); });
+                Fx.Run(async () => { await Fx.Sleep(kk * 14); if (t != tok) return; await Fx.Tween(260, p => g.transform.localScale = Vector3.one * Mathf.Max(0.001f, Fx.BackOut(p) * lay.gs)); });
             }
             for (int k = 0; k < qGuys.Count; k++)
             {
@@ -500,7 +532,7 @@ namespace Tide
             else
             {
                 var pts = Route(b, k); pts.RemoveAt(pts.Count - 1);
-                await Follow(u, pts, 26, false);
+                await Follow(u, pts, 26, false, BSC(B.len));    // 网格缩小了的关：路上慢慢长到泊位的大小
                 if (t != tok) return; await gate; if (t != tok) return;
                 var bp = BerthPos(k, B.len);
                 await Follow(u, new List<Vector3> { g.position, bp }, 15, true);
@@ -533,7 +565,7 @@ namespace Tide
             float te = 1e9f;
             if (dx > 0.01f) te = Mathf.Min(te, (lay.x1 - px) / dx); if (dx < -0.01f) te = Mathf.Min(te, (lay.x0 - px) / dx);
             if (dz > 0.01f) te = Mathf.Min(te, (lay.z1 - pz) / dz); if (dz < -0.01f) te = Mathf.Min(te, (lay.z0 - pz) / dz);
-            float tt = te + 0.55f, Ex = px + dx * tt, Ez = pz + dz * tt, tx = BX(k);
+            float tt = te + 0.55f * lay.gs, Ex = px + dx * tt, Ez = pz + dz * tt, tx = BX(k);
             var pts = new List<Vector3> { W(px, pz), W(Ex, Ez) };
             void V(float x, float z) => pts.Add(W(x, z));
             string side = Ez < lay.z0 ? "top" : Ex < lay.x0 ? "left" : Ex > lay.x1 ? "right" : "bottom";
@@ -550,9 +582,9 @@ namespace Tide
         }
 
         // 沿折线走：位置在线上，朝向看前方 0.7 处（拐角自然变圆）
-        Task Follow(BoatV u, List<Vector3> pts, float speed, bool rev)
+        Task Follow(BoatV u, List<Vector3> pts, float speed, bool rev, float scaleTo = -1)
         {
-            var g = u.g.transform; int t = tok;
+            var g = u.g.transform; int t = tok; float sc0 = g.localScale.x;
             var segs = new List<float>(); float tot = 0;
             for (int k = 1; k < pts.Count; k++) { float l = Vector3.Distance(pts[k], pts[k - 1]); segs.Add(l); tot += l; }
             if (tot < 0.01f) return Task.CompletedTask;
@@ -573,6 +605,7 @@ namespace Tide
                 if (!rev) { var ah = At(s + 0.7f); if ((ah - pos).sqrMagnitude > 1e-4f) u.yaw = Fx.LerpAng(u.yaw, YawOf(ah - pos), 0.35f); }
                 else u.yaw = Fx.LerpAng(u.yaw, 0, 0.25f);
                 g.rotation = Quaternion.Euler(0, u.yaw * Mathf.Rad2Deg, 0);
+                if (scaleTo > 0) g.localScale = Vector3.one * Mathf.Lerp(sc0, scaleTo, e * e);   // 先慢后快：还在网格里的时候别长大，免得蹭到旁边的船
                 if (Fx.Now - lastW > 45) { lastW = Fx.Now; Wake(pos); }
             });
         }
@@ -581,11 +614,11 @@ namespace Tide
         async Task BumpFx(int b, int n, int hit)
         {
             var u = boatV[b]; if (u == null || u.bumping) return; u.bumping = true;
-            var B = L.boats[b]; var d = DirU(b); var h = BoatHome(b); float dist = n + 0.16f; var g = u.g.transform;
+            var B = L.boats[b]; var d = DirU(b); var h = BoatHome(b); float dist = (n + 0.16f) * lay.gs; var g = u.g.transform;
             await Fx.Tween(70 + n * 40, p => { float e = p * p; g.position = new Vector3(h.pos.x + d.x * dist * e, g.position.y, h.pos.z + d.z * dist * e); });
             if (hit >= 0 && boatV[hit] != null) { FlashBoat(boatV[hit]); ShakeBoat(hit, d); }
             FlashBoat(u);
-            Burst(h.pos + d * (dist + (B.len - 0.16f) / 2) + Vector3.up * 0.5f, Color.white, 6, 0.6f);
+            Burst(h.pos + d * (dist + (B.len - 0.16f) / 2 * lay.gs) + Vector3.up * 0.5f, Color.white, 6, 0.6f);
             await Fx.Tween(200, p => { float e = 1 - p; g.position = new Vector3(h.pos.x + d.x * dist * e, g.position.y, h.pos.z + d.z * dist * e); });
             g.position = new Vector3(h.pos.x, g.position.y, h.pos.z); u.bumping = false;
         }
@@ -612,10 +645,10 @@ namespace Tide
         {
             // 画面上的船马上建好（藏在船坞门口），免得手快的时候规则层已经能点它、画面上却还没有这艘船
             int t = tok; AddBoatView(b, false); var u = boatV[b]; var H = L.houses[h];
-            Rules.CellXZ(L, H.cell, out double hx, out double hz); var p0 = W(hx, hz); var hm = BoatHome(b);
-            var g = u.g.transform; g.localScale = Vector3.one * 0.3f; g.position = p0;
+            Rules.CellXZ(L, H.cell, out double hx, out double hz); var p0 = G(hx, hz); var hm = BoatHome(b); float gs = lay.gs;
+            var g = u.g.transform; g.localScale = Vector3.one * 0.3f * gs; g.position = p0;
             await Fx.Sleep(260); if (t != tok || u.state != "lot") return;
-            await Fx.Tween(320, p => { if (u.state != "lot") return; g.position = Vector3.Lerp(p0, hm.pos, p); g.localScale = Vector3.one * (0.3f + 0.7f * p); });
+            await Fx.Tween(320, p => { if (u.state != "lot") return; g.position = Vector3.Lerp(p0, hm.pos, p); g.localScale = Vector3.one * (0.3f + 0.7f * p) * gs; });
             int left = H.list.Count - st.hq[h];
             houseV[h].n.text.text = left.ToString(); houseV[h].n.hide = left <= 0;
             sfx.Play("pop2");
@@ -626,7 +659,7 @@ namespace Tide
             int t = tok; await Fx.Sleep(200); if (t != tok || boatV[b] == null) return;
             var u = boatV[b]; ColorBoat(u, L.boats[b].c); sfx.Play("reveal");
             Burst(u.g.transform.position + Vector3.up * 0.8f, UIKit.Hex(COLS[L.boats[b].c]), 12, 1);
-            float s0 = u.state == "berth" ? BSC(L.boats[b].len) : 1;
+            float s0 = u.state == "berth" ? BSC(L.boats[b].len) : u.state == "lot" ? lay.gs : u.g.transform.localScale.x;
             Fx.Run(() => Fx.Tween(300, p => u.g.transform.localScale = Vector3.one * s0 * (1 + 0.15f * Mathf.Sin(p * Mathf.PI))));
         }
 
@@ -698,7 +731,7 @@ namespace Tide
             if (qGuys.Count < lay.VIS && idx < st.q.Count)
             {
                 var g = MakeGuy(st.q[idx]);
-                g.g.transform.position = W(lay.hx - 0.3f, lay.door.y, 0.25f); g.g.transform.localScale = Vector3.one * GS; g.slot = qGuys.Count; qGuys.Add(g);   // 从屋里（侧门里面）走出来
+                g.g.transform.position = W(lay.hx - 0.3f, lay.door.y, 0.25f); g.g.transform.localScale = Vector3.one * GS; g.slot = qGuys.Count; g.s = PathEnd; qGuys.Add(g);   // 从屋里（侧门里面）走出来
                 DoorOpen();
             }
             HouseCount();
@@ -722,16 +755,17 @@ namespace Tide
             cam.transform.LookAt(new Vector3(sx, sy, -camZ));
         }
 
-        // 取景：把"沙滩队伍 + 码头 + 港湾"投影到屏幕上，反复缩放、上下挪镜头，直到正好塞满可用区域
+        // 取景：画面布局是固定的（10-28 草图），镜头也固定——排队区最上那道绳放在屏幕 15.6%，港湾底边放在 89.6%（从上往下量），
+        // 每关都一样，和网格多大无关。顶栏 / 道具按钮（刘海屏的安全区）挤过来时整体往里缩
         void FitCam()
         {
             if (L == null) return;
             Canvas.ForceUpdateCanvases();
-            float Wd = Screen.width; var R = FreeRect();
-            float hx = Mathf.Max(lay.x1, -lay.x0, BX(MAXB - 1) + 0.7f);
-            var pts = new[] { W(-hx, lay.z1 + 0.2f, 0.3f), W(hx, lay.z1 + 0.2f, 0.3f), W(-hx, lay.z0, 0.3f), W(hx, lay.z0, 0.3f),
-                W(-lay.xQ - 0.45f, lay.zQ2 - 0.3f, 0.9f), W(lay.xQ + 0.3f, lay.zQ2 - 0.3f, 0.9f), W(lay.hx, lay.hz - 0.3f, 1.7f) };   // 最后一个点：小屋屋顶的小旗
-            float tw = Wd - 8 * ui.scale, th = (R.y - R.x) * 0.985f;
+            float Wd = Screen.width, Hd = Screen.height; var c4 = new Vector3[4];
+            ui.top.GetWorldCorners(c4); float hudBot = c4[0].y;      // 只看顶栏：教学字条出不出来都不能让画面变
+            float yTop = Mathf.Min(Hd * (1 - 0.156f), hudBot - Hd * 0.06f), yBot = Mathf.Max(Hd * 0.104f, FreeRect().x);
+            var pts = new[] { W(-REG_W / 2, REG_H / 2), W(REG_W / 2, REG_H / 2), W(-lay.xQ - 0.3f * QS, lay.zQ2 - QLG / 2), W(lay.hx, lay.zQ2 - QLG / 2) };
+            float tw = Wd * 0.9f, th = yTop - yBot; var R = new Vector2(yBot, yTop);
             for (int it = 0; it < 40; it++)
             {
                 PlaceCam(true);
@@ -743,6 +777,7 @@ namespace Tide
                 if (Mathf.Abs(s - 1) < 0.003f && Mathf.Abs(dy) < 0.6f) break;
             }
             seaT.position = new Vector3(0, -0.03f, -camZ);
+            ComboPlace();
         }
 
         int lastW, lastH;
@@ -769,17 +804,19 @@ namespace Tide
                     if (u.bob) { var p = u.g.transform.position; p.y = Mathf.Sin(now / 600 + u.ph) * 0.025f; u.g.transform.position = p; }
                 }
                 if (hintB >= 0 && boatV[hintB] != null && boatV[hintB].state == "lot") { var t = boatV[hintB].g.transform; var p = t.position; p.y = 0.08f + Mathf.Abs(Mathf.Sin(now / 180)) * 0.12f; t.position = p; }
-                // 队伍：每个人朝自己的位置走，走的时候一颠一颠
+                // 队伍：每个人沿着通道走到自己的位置（拐弯也跟着拐，不抄近路穿栏杆），走的时候一颠一颠
                 foreach (var g in qGuys)
                 {
                     var p = QPos(g.slot); var tr = g.g.transform;
-                    float dx = p.x - tr.position.x, dz = -p.z - tr.position.z, dd = Mathf.Sqrt(dx * dx + dz * dz);
-                    if (dd > 0.01f)
+                    float ts = SlotS(g.slot), ds = g.s - ts;
+                    if (Mathf.Abs(ds) > 0.005f)
                     {
-                        float s = Mathf.Min(dd, 5 * dt);
-                        tr.position += new Vector3(dx / dd * s, 0, dz / dd * s);
-                        g.yaw = Fx.LerpAng(g.yaw, Mathf.Atan2(dx, dz), 0.3f); g.walk += dt * 16;
-                        g.body.localPosition = new Vector3(0, Mathf.Abs(Mathf.Sin(g.walk)) * 0.09f, 0);
+                        g.s = Mathf.MoveTowards(g.s, ts, dt * Mathf.Max(5, Mathf.Abs(ds) * 3));   // 落后得多（连着点了好几艘船）就走快点
+                        var q = PathAt(g.s); var np = W(q.x, q.y, 0.25f); var dv = np - tr.position;
+                        tr.position = np;
+                        if (dv.sqrMagnitude > 1e-8f) g.yaw = Fx.LerpAng(g.yaw, Mathf.Atan2(dv.x, dv.z), 0.3f);
+                        g.walk += dt * 16;
+                        g.body.localPosition = new Vector3(0, Mathf.Max(Mathf.Abs(Mathf.Sin(g.walk)) * 0.09f, JumpY(g, now)), 0);
                     }
                     else
                     {
@@ -787,7 +824,7 @@ namespace Tide
                         float panic = Mathf.InverseLerp(0.5f, 1f, stormK);     // 风暴越近越慌：蹦得越快越高
                         float cheer = Mathf.Clamp01(feverK);                    // 连击热起来：排队的人欢呼着蹦（Fever.cs）
                         float rate = Mathf.Lerp(Mathf.Lerp(300, 110, panic), 140, cheer), amp = Mathf.Max(Mathf.Lerp(0.03f, 0.12f, panic), 0.17f * cheer);
-                        g.body.localPosition = new Vector3(0, Mathf.Max(0, Mathf.Sin(now / rate + g.ph)) * amp, 0);
+                        g.body.localPosition = new Vector3(0, Mathf.Max(Mathf.Max(0, Mathf.Sin(now / rate + g.ph)) * amp, JumpY(g, now)), 0);   // 连救 5 人以上：全体跳（Special.cs）
                     }
                     tr.rotation = Quaternion.Euler(0, g.yaw * Mathf.Rad2Deg, 0);
                     tr.position = new Vector3(tr.position.x, 0.25f, tr.position.z);
@@ -880,7 +917,7 @@ namespace Tide
             var plane = new Plane(Vector3.up, new Vector3(0, 0.25f, 0));
             bool onPlane = plane.Raycast(ray, out float en);
             var p = onPlane ? ray.GetPoint(en) : Vector3.zero;
-            float best = 0.45f + 0.3f; int bi = -1;
+            float gs = lay.gs, best = (0.45f + 0.3f) * gs; int bi = -1;   // 容错距离、"优先能开的船"的让分都按网格缩放（船小了不缩会点到旁边那艘）
             foreach (var u in boatV)
             {
                 if (u == null || u.state != "lot") continue;
@@ -888,15 +925,15 @@ namespace Tide
                 if (u.col && u.col.Raycast(ray, out _, 500)) dist = 0;
                 else if (onPlane)
                 {
-                    var B = L.boats[u.b]; var hm = BoatHome(u.b); var d = DirU(u.b); float half = (B.len - 0.16f) / 2;
+                    var B = L.boats[u.b]; var hm = BoatHome(u.b); var d = DirU(u.b); float half = (B.len - 0.16f) / 2 * lay.gs;
                     // 落点到船身矩形（长 len-0.16，宽 0.84）的距离
                     float along = (p.x - hm.pos.x) * d.x + (p.z - hm.pos.z) * d.z, side = (p.x - hm.pos.x) * d.z - (p.z - hm.pos.z) * d.x;
-                    float ea = Mathf.Max(0, Mathf.Abs(along) - half), es = Mathf.Max(0, Mathf.Abs(side) - 0.42f);
+                    float ea = Mathf.Max(0, Mathf.Abs(along) - half), es = Mathf.Max(0, Mathf.Abs(side) - 0.42f * lay.gs);
                     dist = Mathf.Sqrt(ea * ea + es * es);
                 }
                 else continue;
-                if (dist > 0.45f) continue;
-                float score = dist + (!craneMode && !Rules.PathOf(L, st, u.b).free ? 0.3f : 0);
+                if (dist > 0.45f * gs) continue;
+                float score = dist + (!craneMode && !Rules.PathOf(L, st, u.b).free ? 0.3f * gs : 0);
                 if (score < best) { best = score; bi = u.b; }
             }
             return bi;

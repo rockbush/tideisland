@@ -21,6 +21,16 @@ namespace Tide
         const int RUN_STEP = 10, SP_EVERY = 15, SP_MAX = 4;
         int spMade, rainbowWait;   // 这关已经奖励了几艘特殊船（轮流出：集合、彩虹、集合…）；还有几艘彩虹船等空泊位
         int run; float runT = -9999, runBigT = -9999;   // 连击人数、最后一个人上船的时间、最近一次满 10 的时间
+        // 10-28 用户：连续救人 5 个以上，排队的人全体跳 2 秒；连击没断就一直续（每上一个人从头算 2 秒）
+        const int JUMP_RUN = 5; const float JUMP_MS = 2000, JUMP_HOP = 380, JUMP_H = 0.32f;   // 一跳 0.38 秒，跳起 0.32（模型单位，人身高 0.9）
+        float jumpT = -9999;
+        // 全体跳的高度（每帧每人调）：同一个节拍一起跳，每人差一点点免得像复制粘贴；开头结尾 0.2 秒淡入淡出
+        float JumpY(Guy g, float now)
+        {
+            float e = now - jumpT; if (e < 0 || e > JUMP_MS) return 0;
+            float env = Mathf.Clamp01(e / 200) * Mathf.Clamp01((JUMP_MS - e) / 200);
+            return Mathf.Abs(Mathf.Sin((e / JUMP_HOP + g.ph * 0.04f) * Mathf.PI)) * JUMP_H * env;
+        }
         RectTransform comboBox, comboRing, comboSplash; UnityEngine.UI.Image comboTimer; UnityEngine.UI.Text comboTxt, comboSub; CanvasGroup comboCg;
         const float RING = 76;                  // 救生圈在界面上的直径
         static readonly Vector2 RING_C = new Vector2(0, 20);   // 救生圈中心在牌子里的位置（下面挂木牌）
@@ -29,6 +39,7 @@ namespace Tide
         void RunHit()
         {
             run = Fx.Now - runT < RUN_WIN ? run + 1 : 1; runT = Fx.Now;
+            if (run >= JUMP_RUN) { if (Fx.Now - jumpT > JUMP_MS) jumpT = Fx.Now; else jumpT = Fx.Now - ((Fx.Now - jumpT) % JUMP_HOP); }   // 续的时候对齐到节拍上，不会半空中一顿
             if (run < 2) return;
             if (!comboBox) ComboBuild();
             comboTxt.text = comboRing ? "×" + run : F("连击 ×{0}", run);
@@ -50,9 +61,7 @@ namespace Tide
         {
             comboBox = OnCanvas("combo"); comboBox.sizeDelta = new Vector2(120, 140);
             comboCg = comboBox.gameObject.AddComponent<CanvasGroup>(); comboCg.blocksRaycasts = false;
-            // 左上角草地上（菜单按钮下面、风暴条左下）：那儿只有椰子树和草屋，不挡港湾里的船和排队的人
-            // （原来放在码头下面的水面左边，宽一点的关卡会盖住港湾左边的船）
-            comboBox.anchoredPosition = ToCanvas(new Vector3(Screen.width * 0.13f, Screen.height * 0.862f, 0)) - RING_C;
+            ComboPlace();
             comboRing = null; comboSplash = null; comboTimer = null;
             if (Skin.Has("combo_ring"))
             {
@@ -122,6 +131,15 @@ namespace Tide
             return sp;
         }
 
+        // 10-28 草图：排队区右边、小屋下面那一格（第 1 道右头外面的沙滩，屏幕约 82%, 32%），比原来小一圈
+        //（原来在左上角草地上；再早放在码头下面的水面左边，宽一点的关卡会盖住港湾左边的船）
+        const float COMBO_K = 0.75f;
+        void ComboPlace()
+        {
+            if (!comboBox || L == null) return;
+            comboBox.anchoredPosition = ToCanvas(cam.WorldToScreenPoint(W(lay.xT + 0.3f * QS + 1.0f, lay.zQ1 - 0.05f * QLG))) - new Vector2(0, RING_C.y * 0.25f);
+        }
+
         // 每帧：每上一个人救生圈晃一下、满 10 人整个牌子大跳；连击越高牌子越大、×20 起水花；倒计时环；RUN_WIN 内没人再上船就淡出（连击断了）
         void ComboTick()
         {
@@ -129,7 +147,7 @@ namespace Tide
             float e = Fx.Now - runT, eb = Fx.Now - runBigT;
             float s = 0.9f + 0.06f * Mathf.Min(run / RUN_STEP, 3);
             if (eb < 300) s *= eb < 130 ? Mathf.Lerp(0.75f, 1.25f, eb / 130) : Mathf.Lerp(1.25f, 1, (eb - 130) / 170);
-            comboBox.localScale = Vector3.one * s;
+            comboBox.localScale = Vector3.one * s * COMBO_K;
             comboCg.alpha = e < RUN_WIN - 500 ? 1 : Mathf.Clamp01(1 - (e - (RUN_WIN - 500)) / 500);
             if (comboRing)
             {
@@ -169,7 +187,8 @@ namespace Tide
             SpecialLook(u, kind);
             sfx.Play("reveal"); sfx.Play("star3"); Haptics.Play(Haptics.Kind.Success);
             Burst(g.position + Vector3.up * 0.7f, kind == 1 ? UIKit.Hex("ffd34d") : UIKit.Hex("ff7ac0"), 22, 1.4f);
-            Fx.Run(() => Fx.Tween(420, p => { if (g) g.localScale = Vector3.one * (1 + 0.3f * Mathf.Sin(p * Mathf.PI)); }));
+            float s0 = lay.gs;   // 挑的都是港湾里的船：网格缩小的关船本来就小，弹完回到 lay.gs
+            Fx.Run(() => Fx.Tween(420, p => { if (g) g.localScale = Vector3.one * s0 * (1 + 0.3f * Mathf.Sin(p * Mathf.PI)); }));
             if (!save.seen.Contains("sp_gather")) { save.seen.Add("sp_gather"); save.Persist(); Toast(T("连击奖励：集合船！一靠岸，同色的人全部插队上船")); }
             else Toast(T("连击奖励：集合船！"));
         }

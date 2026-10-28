@@ -113,15 +113,19 @@ namespace Tide
             return m;
         }
 
-        // ---- 小人：Blender 做的 Q 版大头小人（make_islanders_human.py：guy_a 刘海 / guy_b 小揪 / guy_c 鸭舌帽）----
+        // ---- 小人：Blender 做的 Q 版大头小人（10-28 make_islanders_hats.py：每种颜色一种头饰，下标 = 颜色下标 COLS）----
         // 把模型的网格连同朝向修正一起烘成一个独立网格（脚底在原点、脸朝 +Z），team[i] = 第 i 个子网格要不要染队伍色
         // GuyW = 同一个人去掉右手（队头招手时换上，另挂一只会挥的手）；子网格顺序和完整版一样，材质通用
-        public static readonly string[] GUYS = { "guy_a", "guy_b", "guy_c" };
+        // 红船长帽 / 蓝水手帽 / 黄草帽 / 绿椰子叶 / 紫丸子头 / 粉双发髻 / 青潜水镜 / 橙头巾：只看剪影也分得出颜色（帽子和衣服都是船的队伍色）
+        public static readonly string[] GUYS = { "guyh_captain", "guyh_sailor", "guyh_straw", "guyh_sprout", "guyh_bun", "guyh_twin", "guyh_goggle", "guyh_bandana" };
         static int GuyIdx(int variant) => ((variant % GUYS.Length) + GUYS.Length) % GUYS.Length;
         public static (Mesh mesh, bool[] team) Guy(int variant) => GuyMesh(GUYS[GuyIdx(variant)]);
         public static (Mesh mesh, bool[] team) GuyW(int variant) => GuyMesh(GUYS[GuyIdx(variant)] + "_w");
-        // 招手的那只手（GuyW 缺的那只）在网格的 +X 还是 -X（导入时轴会不会翻不用猜：缺手的那一边包围盒会变窄）
-        public static float GuyWaveX(int variant) => Guy(variant).mesh.bounds.max.x > GuyW(variant).mesh.bounds.max.x + 0.01f ? 1 : -1;
+        // 招手的那只手（GuyW 缺的那只）在网格的 +X 还是 -X（导入时轴会不会翻不用猜：完整版比 GuyW 多出来的顶点就是那只手，看它们 x 加起来的正负）
+        // 10-28 原来比包围盒宽窄：新模型草帽帽檐、飘带比胳膊还宽，两边包围盒一样，永远判成 -X
+        static readonly Dictionary<int, float> waveX = new Dictionary<int, float>();
+        public static float GuyWaveX(int variant) => waveX.TryGetValue(variant, out var w) ? w : waveX[variant] = SumX(Guy(variant).mesh) > SumX(GuyW(variant).mesh) ? 1 : -1;
+        static float SumX(Mesh m) { float s = 0; foreach (var v in m.vertices) s += v.x; return s; }
         static (Mesh mesh, bool[] team) GuyMesh(string name)
         {
             if (guyMesh.TryGetValue(name, out var g)) return g;
