@@ -1,0 +1,41 @@
+{
+  "areas": [
+    { "id": "camp", "name": "海滩营地", "z": 0, "coins": 200, "crane": 1, "sort": 1,
+      "tasks": [
+        { "id": "c_fire",   "name": "篝火",   "cost": 1, "ruin": 0.8, "parts": [ { "m": "home_bonfire", "x": 0.3, "y": 0.4, "h": 0.22, "r": 0, "s": 1.3 }, { "m": "home_flame", "x": 0.3, "y": 0.4, "h": 0.22, "r": 0, "s": 1.3, "spin": "flame" } ] },
+        { "id": "c_tent",   "name": "帐篷",   "cost": 1, "ruin": 1.0, "parts": [ { "m": "home_tent", "x": -1.9, "y": 1.5, "h": 0.22, "r": -18, "s": 1.3 } ] },
+        { "id": "c_flag",   "name": "求救旗", "cost": 1, "ruin": 0.6, "parts": [ { "m": "home_flag", "x": 2.4, "y": 2.4, "h": 0.22, "r": 0, "s": 1.3 } ] },
+        { "id": "c_palm",   "name": "椰子树", "cost": 2, "ruin": 0.9, "parts": [ { "m": "palm_a", "x": -2.7, "y": -0.6, "h": 0.22, "r": 200, "s": 0.95 }, { "m": "palm_b", "x": 2.7, "y": -1.6, "h": 0.22, "r": -30, "s": 0.95 } ] },
+        { "id": "c_hut",    "name": "小木屋", "cost": 2, "ruin": 1.1, "parts": [ { "m": "hut", "x": 1.9, "y": 0.6, "h": 0.22, "r": -15, "s": 1.25 } ] },
+        { "id": "c_hammock","name": "吊床",   "cost": 2, "ruin": 0.9, "parts": [ { "m": "home_hammock", "x": -1.1, "y": -2.1, "h": 0.22, "r": 12, "s": 1.25 } ] },
+        { "id": "c_jetty",  "name": "小栈桥", "cost": 2, "ruin": 0.9, "parts": [ { "m": "home_jetty", "x": 0.9, "y": -5.0, "h": 0, "r": 0, "s": 1.0 } ] },
+        { "id": "c_umb",    "name": "遮阳伞", "cost": 2, "ruin": 0.7, "parts": [ { "m": "umbrella", "x": 1.0, "y": -3.3, "h": 0.22, "r": 30, "s": 1.25 } ] }
+      ] },
+    { "id": "village", "name": "渔村", "z": 11, "coins": 300, "crane": 2, "sort": 1,
+      "tasks": [
+        { "id": "v_rack",   "name": "晒鱼架", "cost": 2, "ruin": 0.9, "parts": [ { "m": "home_fishrack", "x": -2.2, "y": 7.6, "h": 0.3, "r": 12, "s": 1.3 } ] },
+        { "id": "v_well",   "name": "水井",   "cost": 2, "ruin": 0.8, "parts": [ { "m": "home_well", "x": 1.5, "y": 10.4, "h": 0.3, "r": -10, "s": 1.3 } ] },
+        { "id": "v_garden", "name": "菜园",   "cost": 2, "ruin": 1.1, "parts": [ { "m": "home_garden", "x": -1.9, "y": 10.6, "h": 0.3, "r": 6, "s": 1.3 } ] },
+        { "id": "v_house",  "name": "渔夫小屋","cost": 3, "ruin": 1.2, "parts": [ { "m": "home_house", "x": 1.6, "y": 13.4, "h": 0.3, "r": -12, "s": 1.3 } ] },
+        { "id": "v_boat",   "name": "小渔船", "cost": 2, "ruin": 0.8, "parts": [ { "m": "home_pier", "x": 2.75, "y": 8.4, "h": 0, "r": 0, "s": 1.0 }, { "m": "boat_speed", "x": 3.1, "y": 7.3, "h": 0, "r": 8, "s": 0.85, "tint": "ff9a3c" } ] },
+        { "id": "v_pad",    "name": "直升机坪","cost": 3, "ruin": 1.2, "perk": "heli", "parts": [ { "m": "home_helipad", "x": -1.4, "y": 14.0, "h": 0.3, "r": 0, "s": 1.3 }, { "m": "heli", "x": -1.4, "y": 14.0, "h": 0.42, "r": 30, "s": 0.85 } ] }
+      ] },
+    { "id": "town", "name": "港口小镇", "z": 22, "coins": 400, "crane": 2, "sort": 2,
+      "tasks": [
+        { "id": "t_stall",  "name": "水果摊", "cost": 2, "ruin": 0.9, "parts": [ { "m": "home_stall", "x": -1.9, "y": 18.6, "h": 0.3, "r": 15, "s": 1.3 } ] },
+        { "id": "t_fount",  "name": "喷泉",   "cost": 3, "ruin": 1.0, "parts": [ { "m": "home_fountain", "x": 0.1, "y": 21.6, "h": 0.3, "r": 0, "s": 1.3 } ] },
+        { "id": "t_ware",   "name": "仓库",   "cost": 3, "ruin": 1.3, "perk": "horn", "parts": [ { "m": "home_warehouse", "x": 1.9, "y": 18.9, "h": 0.3, "r": -12, "s": 1.3 } ] },
+        { "id": "t_mill",   "name": "风车",   "cost": 3, "ruin": 1.0, "parts": [ { "m": "home_windmill", "x": 2.1, "y": 24.6, "h": 0.3, "r": -20, "s": 1.3 }, { "m": "home_mill_blade", "x": 2.1, "y": 24.6, "h": 0.3, "r": -20, "s": 1.3, "spin": "mill" } ] },
+        { "id": "t_diner",  "name": "小餐馆", "cost": 3, "ruin": 1.3, "perk": "coin", "parts": [ { "m": "home_diner", "x": -1.8, "y": 24.0, "h": 0.3, "r": 14, "s": 1.3 } ] },
+        { "id": "t_flower", "name": "花坛",   "cost": 2, "ruin": 0.8, "parts": [ { "m": "home_flowers", "x": 0.5, "y": 19.0, "h": 0.3, "r": 0, "s": 1.2 }, { "m": "home_flowers", "x": -0.5, "y": 25.6, "h": 0.3, "r": 40, "s": 1.1 } ] }
+      ] },
+    { "id": "cape", "name": "灯塔岬", "z": 32, "coins": 600, "crane": 3, "sort": 3,
+      "tasks": [
+        { "id": "l_stairs", "name": "石阶",   "cost": 3, "ruin": 0.9, "parts": [ { "m": "home_stairs", "x": 0.9, "y": 32.2, "h": 0.3, "r": 0, "s": 1.0 } ] },
+        { "id": "l_bhouse", "name": "船坞",   "cost": 3, "ruin": 1.1, "parts": [ { "m": "boathouse", "x": -2.2, "y": 30.2, "h": 0.3, "r": 90, "s": 1.4 } ] },
+        { "id": "l_yacht",  "name": "大游艇", "cost": 3, "ruin": 0.9, "parts": [ { "m": "home_pier", "x": -2.7, "y": 28.2, "h": 0, "r": 180, "s": 1.0 }, { "m": "boat_yacht", "x": -3.1, "y": 27.5, "h": 0, "r": 172, "s": 0.85, "tint": "3d8bff" } ] },
+        { "id": "l_light",  "name": "灯塔",   "cost": 4, "ruin": 1.1, "parts": [ { "m": "lighthouse", "x": 1.0, "y": 35.3, "h": 1.0, "r": 0, "s": 1.3 } ] },
+        { "id": "l_statue", "name": "岛民雕像","cost": 5, "ruin": 1.0, "parts": [ { "m": "home_statue", "x": -1.1, "y": 32.6, "h": 0.3, "r": 10, "s": 1.3 } ] }
+      ] }
+  ]
+}

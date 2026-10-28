@@ -1,0 +1,41 @@
+# Unity 自动生成
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# IDE
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# 打包产物
+*.apk
+*.aab
+*.unitypackage
+crashlytics-build.properties
+
+# 构建日志 / 测试截图
+*.log
+/measure/
+/shots*/
+
+# 关卡工厂（dotnet）编译输出
+Tools/Factory/bin/
+Tools/Factory/obj/
+!Tools/Factory/*.csproj
