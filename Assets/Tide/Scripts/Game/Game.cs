@@ -42,6 +42,9 @@ namespace Tide
         LevelEntry[] LEVELS;
         Lot L;
         State st;
+        const float HEAD_S = 0.12f, HEAD_WAIT = 350;   // 离队头多近才出发（米）、最多等多久（毫秒）
+        int aRuns; float aMax;   // 自动测试看：A 兜底用了几次、最远从多远跑过来
+        int boardQ;   // 排着等上船的人数（BoardFx 还没开始的）
         int levelIdx, bumpTold, combo, chain, lastEarn, tok, pipeN, vq, hintB = -1;
         bool demo, intro, craneMode, usedRevive, usedBooster, warned1;
         float idleT, lastBoard, lastDepart;
@@ -173,7 +176,7 @@ namespace Tide
             if (i >= POLE_LV) Rules.MarkSpecial(L, Rules.POLE, new Rng(i * 7919 + save.Tries(i) * 131 + 17));   // 撑杆跳功能人，各种颜色随机（Pole.cs）；每次重玩换位置
             st = Rules.NewState(L);
             boosterUse[0] = boosterUse[1] = 0;
-            vq = 0; usedRevive = usedBooster = false; craneMode = false; hintB = -1; combo = 0; chain = 0; spMade = 0; rainbowWait = 0; run = 0; runT = runBigT = -9999; warned1 = false; idleT = 0;
+            vq = 0; boardQ = 0; usedRevive = usedBooster = false; craneMode = false; hintB = -1; combo = 0; chain = 0; spMade = 0; rainbowWait = 0; run = 0; runT = runBigT = -9999; warned1 = false; idleT = 0;
             for (int k = 0; k < MAXB; k++) gates[k] = new Gate { };
             for (int k = 0; k < MAXB; k++) gates[k].tcs.TrySetResult(true);
             ClearLabels();
@@ -529,7 +532,7 @@ namespace Tide
                 else if (e.t == "spawn") Fx.Run(() => SpawnFx(E.b, E.h));
                 else if (e.t == "reveal") Fx.Run(() => RevealFx(E.b));
                 else if (e.t == "bump") { Fx.Run(() => BumpFx(E.b, E.n, E.hit)); if (E.hit == -3) SharkSnap(E.k); }
-                else if (e.t == "board") QueueFx(() => BoardFx(E));
+                else if (e.t == "board") { boardQ++; QueueFx(() => BoardFx(E)); }
                 else if (e.t == "gather") GatherFx(E);   // 集合船靠岸：队伍重新上色（Special.cs）
                 else if (e.t == "vault") QueueFx(() => VaultFx(E));   // 撑杆跳功能人上船了（Pole.cs）
                 else if (e.t == "leave") { var d = new Gate { owner = e.b, stage = "queued" }; gates[e.k] = d; QueueFx(() => { Fx.Run(() => LeaveFx(E, d)); return Task.CompletedTask; }); }
@@ -692,8 +695,14 @@ namespace Tide
         async Task BoardFx(Ev e)
         {
             var u = boatV[e.b]; if (u.arrive != null) await u.arrive;
+            if (qGuys.Count == 0) { boardQ = Mathf.Max(0, boardQ - 1); return; }
+            // 10-29 用户：上船太快时，还在后面通道里的人直接飞过栏杆上船 →
+            // B：只有走到队头的人才出发（等的时候整队按 boardQ 加速往前滚）；A：等太久还没到，就沿通道跑到队头再出去（见 Dash）
+            var guy = qGuys[0]; int t0 = tok;
+            if (!guy.vault) for (float w0 = Fx.Now; guy.s > HEAD_S && Fx.Now - w0 < HEAD_WAIT && qGuys.Count > 0 && qGuys[0] == guy; ) { await Fx.Sleep(16); if (t0 != tok) return; }
+            boardQ = Mathf.Max(0, boardQ - 1);
             if (qGuys.Count == 0) return;
-            var guy = qGuys[0]; qGuys.RemoveAt(0); vq++; RefillQueue();
+            guy = qGuys[0]; qGuys.RemoveAt(0); vq++; RefillQueue();
             var B = L.boats[e.b]; var seat = e.seat < u.seats.Length ? u.seats[e.seat] : null;
             var from = guy.g.transform.position; var pier = W(BX(e.k), lay.zP - 0.25f, 0.3f);
             combo = Fx.Now - lastBoard < 900 ? combo + 1 : 0; lastBoard = Fx.Now;
@@ -702,6 +711,18 @@ namespace Tide
             var dash = guy.vault || guy.x == Rules.POLE ? VaultJump(guy, u, seat, e) : Dash();   // 功能人自己、被他叫到的人：撑杆跳上船
             async Task Dash()
             {
+                if (guy.s > 0.02f)   // A 兜底：还没到队头，沿着通道跑过去（不抄近路穿栏杆）
+                {
+                    aRuns++; aMax = Mathf.Max(aMax, guy.s);
+                    float s0 = guy.s, dur = Mathf.Max(60, s0 / 28f * 1000) * BoardSpeed;
+                    await Fx.Tween(dur, p =>
+                    {
+                        var q = PathAt(Mathf.Lerp(s0, 0, p)); var np = W(q.x, q.y, 0.25f); var dv = np - gt.position;
+                        if (dv.sqrMagnitude > 1e-6f) gt.rotation = Quaternion.Euler(0, YawOf(dv) * Mathf.Rad2Deg, 0);
+                        gt.position = np; guy.body.localPosition = new Vector3(0, Mathf.Abs(Mathf.Sin(p * dur / 40)) * 0.09f, 0);
+                    });
+                    guy.s = 0; from = gt.position;
+                }
                 var gate = W(-lay.xQ + 0.05f, lay.zQ1 + QLG / 2 + 0.2f, 0.25f);   // 先从栏杆左前角的上船口出来，别跨过红绳
                 if (from.z > gate.z + 0.1f)
                 {
@@ -837,7 +858,7 @@ namespace Tide
                     float ts = SlotS(g.slot), ds = g.s - ts;
                     if (Mathf.Abs(ds) > 0.005f)
                     {
-                        g.s = Mathf.MoveTowards(g.s, ts, dt * Mathf.Max(5, Mathf.Abs(ds) * 3));   // 落后得多（连着点了好几艘船）就走快点
+                        g.s = Mathf.MoveTowards(g.s, ts, dt * Mathf.Min(45, Mathf.Max(5 + boardQ * 3, Mathf.Abs(ds) * (3 + boardQ))));   // 落后得多就走快点；排着好几个人等上船时整队像传送带一样往前滚（10-29）
                         var q = PathAt(g.s); var np = W(q.x, q.y, 0.25f); var dv = np - tr.position;
                         tr.position = np;
                         if (dv.sqrMagnitude > 1e-8f) g.yaw = Fx.LerpAng(g.yaw, Mathf.Atan2(dv.x, dv.z), 0.3f);

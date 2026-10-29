@@ -418,6 +418,7 @@ namespace Tide
                     await Fx.SleepKeep(pace);
                 }
                 { var lot = Rules.InLot(L, st); TLog("  诊断 qi=" + st.qi + "/" + st.q.Count + " vq=" + vq + " pipeN=" + pipeN + " 泊位=[" + string.Join(",", st.berth.Select(b => b < 0 ? "空" : b + "(c" + L.boats[b].c + " sp" + L.boats[b].sp + " " + st.load[b] + "/" + L.boats[b].cap + " " + (boatV[b] != null ? boatV[b].state : "null") + ")")) + "] 港湾" + lot.Count + " 能走" + lot.Count(b => Rules.CanGo(L, st, b)) + " best=" + Rules.BestMove(L, st, null, 0) + " 队头色=" + (st.qi < st.q.Count ? st.q[st.qi] : -1)); }
+                TLog("关" + (lv + 1) + " 沿通道兜底 " + aRuns + " 次，最远 " + aMax.ToString("0.0") + "m"); aRuns = 0; aMax = 0;
                 TLog("关" + (lv + 1) + " 状态=" + st.status + " 最长连击=" + lvMax + "人 特殊船=" + spMade + " 彩虹船最多坐了" + rainbowRide + " 用时" + (Time.realtimeSinceStartup - t0).ToString("0") + "s");
             }
             TLog("总计 过关 " + wins + " 输(复活) " + loses + " 最高连击 " + maxChain + " 特殊船 " + totalSp);
