@@ -244,11 +244,7 @@ namespace Tide
             QueueFx(async () =>
             {
                 var u = boatV[e.b]; if (u != null && u.arrive != null) await u.arrive;
-                for (int k = 0; k < qGuys.Count; k++)
-                {
-                    int c = st.q[vq + k];
-                    if (qGuys[k].c != c) { RecolorGuy(qGuys[k], c); var bd = qGuys[k].body; Fx.Run(() => Fx.Tween(300, p => bd.localPosition = new Vector3(0, Mathf.Sin(p * Mathf.PI) * 0.3f, 0))); }
-                }
+                SyncGuys(true);
                 sfx.Play("reveal"); FloatText(u != null ? u.g.transform.position + Vector3.up : Vector3.zero, T("集合！"));
             });
         }

@@ -68,7 +68,8 @@ namespace Tide
             public Task arrive; public GameObject[] arrows; public Transform[] seats; public List<GameObject> seatM = new List<GameObject>();
             public Label q; public Collider col; public List<MeshRenderer> ol; public List<Guy> dashG = new List<Guy>();
         }
-        class Guy { public GameObject g; public Transform body; public int c, slot, v; public float ph, walk, yaw, s; public MeshRenderer r, ol; public string dbg = ""; }
+        class Guy { public GameObject g; public Transform body; public int c, slot, v; public float ph, walk, yaw, s; public MeshRenderer r, ol; public string dbg = "";
+            public byte x; public bool vault, hi; public GameObject pole, gold; }   // x：功能（Rules.POLE…）；vault：被撑杆跳叫到了，原地等着起跳（Pole.cs）
         class Gate { public TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>(); public Task p => tcs.Task; public int owner = -1; public string stage = ""; }   // owner/stage：排查卡死用
 
         BoatV[] boatV = new BoatV[0];
@@ -165,8 +166,11 @@ namespace Tide
             ClearUIFx();   // 动画都丢掉了，飘在屏幕上的彩纸、飞金币、提示字也得一起删，不然会定在画面上
             save.level = i; save.Persist();
             var lv = LEVELS[i];
-            L = Rules.LoadLevel(lv);
+            int tw = TideCount(lv.cfg);   // 港湾大到船要缩小的关拆成几波，涨潮一波一波送进来（TideWave.cs）
+            L = tw > 0 ? TideLevel(lv, tw) : Rules.LoadLevel(lv);
+            tideN = 0;
             RecolorForTry(i);
+            if (i >= POLE_LV) Rules.MarkSpecial(L, Rules.POLE, new Rng(i * 7919 + save.Tries(i) * 131 + 17));   // 撑杆跳功能人，各种颜色随机（Pole.cs）；每次重玩换位置
             st = Rules.NewState(L);
             boosterUse[0] = boosterUse[1] = 0;
             vq = 0; usedRevive = usedBooster = false; craneMode = false; hintB = -1; combo = 0; chain = 0; spMade = 0; rainbowWait = 0; run = 0; runT = runBigT = -9999; warned1 = false; idleT = 0;
@@ -182,7 +186,7 @@ namespace Tide
             for (int b = 0; b < L.boats.Count; b++) if (st.inl[b] != 0) { AddBoatView(b, true); AddMechView(b); }
             for (int k = 0; k < Mathf.Min(lay.VIS, st.q.Count); k++)
             {
-                var g = MakeGuy(st.q[k]); var p = QPos(k);
+                var g = MakeGuy(st.q[k], QX(k)); var p = QPos(k);
                 g.g.transform.position = W(p.x, p.z, 0.25f); g.yaw = YawOf(new Vector3(p.fx, 0, -p.fz)); g.slot = k; g.s = SlotS(k);
                 g.g.transform.localScale = Vector3.one * 0.001f; qGuys.Add(g);
             }
@@ -199,6 +203,7 @@ namespace Tide
             if (L.boats.Any(B => B.weed > 0)) cards.Add("weed");
             if (L.boats.Any(B => B.lockBy >= 0)) cards.Add("lock");
             if (L.sharks.Count > 0) cards.Add("shark");
+            if (L.qx != null && L.qx.Contains(Rules.POLE)) cards.Add("pole");
             var fresh = OnScreen ? new List<string>() : cards.Where(k => !save.seen.Contains(k)).ToList();   // 开始界面/地图后面摆着的关不弹卡片
             if (!OnScreen)
             {
@@ -215,6 +220,7 @@ namespace Tide
                 int t0 = tok;   // 困难 / 超难关：开局提醒一下
                 Fx.Run(async () => { await Fx.Sleep(450); if (t0 == tok) { Banner(T(L.cfg.tag == 2 ? "超难关！" : "困难关！"), L.cfg.tag == 2 ? "super" : "hard"); Haptics.Play(Haptics.Kind.Medium); } });
             }
+            if (!OnScreen && L.waves != null && L.waves.Count > 0 && !save.seen.Contains("tide")) { save.seen.Add("tide"); save.Persist(); int t1 = tok, nw = L.waves.Count + 1; Fx.Run(async () => { await Fx.Sleep(1500); if (t1 == tok) Toast(string.Format(T("这关有 {0} 波船：港湾清空就会涨潮，送来下一波"), nw)); }); }
             if (!OnScreen) { GuideLevel(); StreakGift(); }   // 先 GuideLevel：它会清掉上一关剩下的步骤，连胜卡片要排在它后面 else { gCrane = gSort = 0; GuideClear(); }
             if (fresh.Count > 0)
             {
@@ -223,9 +229,10 @@ namespace Tide
             }
         }
 
-        void LayoutLevel()
+        // 网格（中心在原点）缩放到塞得进固定的港湾；小关最多放大到 GS_MAX
+        static float GridScale(Lot L, out float x0, out float x1, out float z0, out float z1)
         {
-            float x0 = 1e9f, x1 = -1e9f, z0 = 1e9f, z1 = -1e9f, e = L.rot != 0 ? 0.72f : 0.5f;
+            x0 = 1e9f; x1 = -1e9f; z0 = 1e9f; z1 = -1e9f; float e = L.rot != 0 ? 0.72f : 0.5f;
             for (int i = 0; i < L.ins.Length; i++)
                 if (L.ins[i] != 0)
                 {
@@ -233,8 +240,11 @@ namespace Tide
                     x0 = Mathf.Min(x0, (float)x - e); x1 = Mathf.Max(x1, (float)x + e); z0 = Mathf.Min(z0, (float)z - e); z1 = Mathf.Max(z1, (float)z + e);
                 }
             x0 -= 0.2f; x1 += 0.2f; z0 -= 0.2f; z1 += 0.2f;
-            // 网格（中心在原点）缩放到塞得进固定的港湾；小关最多放大到 GS_MAX
-            float gs = Mathf.Min(GS_MAX, (REG_W - 0.3f) / (x1 - x0), (REG_H - 0.3f) / (z1 - z0));
+            return Mathf.Min(GS_MAX, (REG_W - 0.3f) / (x1 - x0), (REG_H - 0.3f) / (z1 - z0));
+        }
+        void LayoutLevel()
+        {
+            float gs = GridScale(L, out float x0, out float x1, out float z0, out float z1);
             lay = new Lay { gs = gs, x0 = x0 * gs, x1 = x1 * gs, z0 = z0 * gs, z1 = z1 * gs };
             // 下面这些都是固定的，和关卡无关（数值由草图比例反算：scratchpad lay2.js）
             lay.zP = -REG_H / 2 - 1.0f - DEEP;           // 码头前沿：港湾上沿往上 1 米航道 + 泊位
@@ -304,27 +314,11 @@ namespace Tide
             parts.Clear();
             // 港湾：浅一点的水，固定大小（10-28 草图：每关一样大，网格缩放后摆在正中）
             //（四周原来有一圈红白浮球和四个角的黄浮标，用户要画面干净，去掉了；存档"海上复杂版本"里还有）
-            var lag = GameObject.CreatePrimitive(PrimitiveType.Quad); Destroy(lag.GetComponent<Collider>());
+            var lag = GameObject.CreatePrimitive(PrimitiveType.Quad); Destroy(lag.GetComponent<Collider>()); lag.name = "Lagoon";
             lag.transform.SetParent(world); lag.transform.position = W(0, 0, 0.0f); lag.transform.rotation = Quaternion.Euler(90, 0, 0);
             lag.transform.localScale = new Vector3(REG_W, REG_H, 1);
             lag.GetComponent<MeshRenderer>().sharedMaterial = Art.UnlitMat(UIKit.Hex("8fe3ef", 0.55f), true);
-            // 礁石、船坞
-            houseV.Clear();
-            for (int i = 0; i < L.ins.Length; i++)
-            {
-                if (L.ins[i] != 2) continue;
-                Rules.CellXZ(L, i, out double x, out double z);
-                var r = new Rng(i + 3);
-                Add(i % 2 == 0 ? "rock_a" : "rock_b", G(x, z), (float)r.Next() * 360, false, 0.95f * lay.gs);
-            }
-            for (int h = 0; h < L.houses.Count; h++)
-            {
-                var H = L.houses[h];
-                Rules.CellXZ(L, H.cell, out double x, out double z); Rules.DirXZ(L, H.d, out double dx, out double dz);
-                var g = Add("boathouse", G(x, z), YawOf(W(dx, dz)) * Mathf.Rad2Deg, true, 1.05f * lay.gs);
-                var n = NewLabel(g.transform, new Vector3(0, 1.3f, 0), H.list.Count.ToString(), UIKit.Cream, 20, 30);
-                houseV.Add((g, n));
-            }
+            BuildDeco();
             // 背景（沙滩、草地、椰子树…），原点在栈桥前沿
             Add("env_harbor", W(0, lay.zP), 0, false);
             // 栈桥：7 个泊位 + 右边收尾 + 两头接到岸上的木板
@@ -332,11 +326,38 @@ namespace Tide
             Add("dock_end", W(BX(MAXB - 1) + BW / 2, lay.zP), 0, false);
             foreach (int sx in new[] { -1, 1 }) Add("dock_walk", W(sx * (BX(MAXB - 1) + BW), lay.zP), 0, false);   // 两头只是栈道：以前用泊位模型，看起来像一个永远空着的泊位
             QueueScene();   // 排队通道的栏杆 + 出人的小屋（QueueHouse.cs），原来是一排小圆点铺的路
-            HeadInit();   // 队头的人举手挥 + 白光（QueueHead.cs），原来这里是一面小红旗
+            HeadInit();   // 队头的人举手挥 + 白描边（QueueHead.cs），原来这里是一面小红旗
+            LiveScene();  // 椰子树、草屋、灌木、遮阳伞单独摆，连击全队跳时跟着摇、弹（Cheer.cs）
             // 锁着的泊位：📺 看广告 / 🪙 花金币
             for (int k = 0; k < MAXB; k++) lockV[k] = null;
             for (int k = L.berths; k < MAXB; k++) lockV[k] = LockModel(k, k < L.berths + NAD);   // 开局几个泊位看关卡（前 10 关 3 个，之后 4 个），后面紧跟 2 个广告位，再往后金币
             StormScene();
+        }
+
+        // 礁石、船坞（单独挂在 deco 下面：涨潮分波每波换一套，TideWave.cs）
+        Transform deco;
+        void BuildDeco(bool tide = false)   // tide：涨潮换下一波，船坞牌子按已经出来的船算
+        {
+            foreach (var (g0, n0) in houseV) RemoveLabel(n0);
+            houseV.Clear();
+            if (deco) Destroy(deco.gameObject);
+            deco = new GameObject("deco").transform; deco.SetParent(world, false);
+            for (int i = 0; i < L.ins.Length; i++)
+            {
+                if (L.ins[i] != 2) continue;
+                Rules.CellXZ(L, i, out double x, out double z);
+                var r = new Rng(i + 3);
+                Add(i % 2 == 0 ? "rock_a" : "rock_b", G(x, z), (float)r.Next() * 360, false, 0.95f * lay.gs).transform.SetParent(deco, true);
+            }
+            for (int h = 0; h < L.houses.Count; h++)
+            {
+                var H = L.houses[h];
+                Rules.CellXZ(L, H.cell, out double x, out double z); Rules.DirXZ(L, H.d, out double dx, out double dz);
+                var g = Add("boathouse", G(x, z), YawOf(W(dx, dz)) * Mathf.Rad2Deg, true, 1.05f * lay.gs); g.transform.SetParent(deco, true);
+                int left = H.list.Count - (tide ? st.hq[h] : 0);
+                var n = NewLabel(g.transform, new Vector3(0, 1.3f, 0), left.ToString(), UIKit.Cream, 20, 30); n.hide = left <= 0;
+                houseV.Add((g, n));
+            }
         }
 
         GameObject LockModel(int k, bool ad)
@@ -419,7 +440,7 @@ namespace Tide
         Vector3 DirU(int b) { Rules.DirXZ(L, L.boats[b].d, out double dx, out double dz); return W(dx, dz); }
 
         // ---- 小人 ----
-        Guy MakeGuy(int c)
+        Guy MakeGuy(int c, byte x = 0)
         {
             // 头饰跟着颜色走（v = c），帽子和衣服是队伍色
             var u = new Guy { c = c, ph = UnityEngine.Random.value * 6.28f, v = c };
@@ -430,6 +451,7 @@ namespace Tide
             u.r = body.AddComponent<MeshRenderer>();
             u.r.sharedMaterials = Art.GuyMats(u.v, COLS[c]);
             var ol = Art.AddOutline(body, GuyOutline(c)); u.ol = ol.Count > 0 ? ol[0] : null;
+            if (x != 0) SetSpecial(u, x);
             return u;
         }
         static Material GuyOutline(int c) => Art.OutlineMat(Art.OutlineColor(Art.Lit(UIKit.Hex(COLS[c]))), 1.2f);
@@ -439,6 +461,7 @@ namespace Tide
             GuyMesh(g, (head ? Art.GuyW(c) : Art.Guy(c)).mesh);
             if (head) HeadRimMesh(g);
             g.r.sharedMaterials = Art.GuyMats(c, COLS[c]); if (g.ol) g.ol.sharedMaterial = GuyOutline(c);
+            if (g.x != 0) SetSpecial(g, g.x);   // 杆子、旗子、金边跟着新模型、新颜色重做
         }
 
         // ======================================================================
@@ -508,8 +531,10 @@ namespace Tide
                 else if (e.t == "bump") { Fx.Run(() => BumpFx(E.b, E.n, E.hit)); if (E.hit == -3) SharkSnap(E.k); }
                 else if (e.t == "board") QueueFx(() => BoardFx(E));
                 else if (e.t == "gather") GatherFx(E);   // 集合船靠岸：队伍重新上色（Special.cs）
+                else if (e.t == "vault") QueueFx(() => VaultFx(E));   // 撑杆跳功能人上船了（Pole.cs）
                 else if (e.t == "leave") { var d = new Gate { owner = e.b, stage = "queued" }; gates[e.k] = d; QueueFx(() => { Fx.Run(() => LeaveFx(E, d)); return Task.CompletedTask; }); }
             }
+            TideCheck();   // 港湾空了、后面还有波 → 涨潮（TideWave.cs）
             if (st.status != "play") { var s = st.status; QueueFx(() => EndFx(s)); }
             MechSync();
             UpdateHUD();
@@ -674,7 +699,7 @@ namespace Tide
             combo = Fx.Now - lastBoard < 900 ? combo + 1 : 0; lastBoard = Fx.Now;
             RunHit(); BoardSound();   // 连击按上船人数算（Special.cs）；上船音按连击往上爬音阶（Fever.cs）
             var gt = guy.g.transform;
-            var dash = Dash();
+            var dash = guy.vault || guy.x == Rules.POLE ? VaultJump(guy, u, seat, e) : Dash();   // 功能人自己、被他叫到的人：撑杆跳上船
             async Task Dash()
             {
                 var gate = W(-lay.xQ + 0.05f, lay.zQ1 + QLG / 2 + 0.2f, 0.25f);   // 先从栏杆左前角的上船口出来，别跨过红绳
@@ -730,7 +755,7 @@ namespace Tide
             int idx = vq + qGuys.Count;
             if (qGuys.Count < lay.VIS && idx < st.q.Count)
             {
-                var g = MakeGuy(st.q[idx]);
+                var g = MakeGuy(st.q[idx], QX(idx));
                 g.g.transform.position = W(lay.hx - 0.3f, lay.door.y, 0.25f); g.g.transform.localScale = Vector3.one * GS; g.slot = qGuys.Count; g.s = PathEnd; qGuys.Add(g);   // 从屋里（侧门里面）走出来
                 DoorOpen();
             }
@@ -807,6 +832,7 @@ namespace Tide
                 // 队伍：每个人沿着通道走到自己的位置（拐弯也跟着拐，不抄近路穿栏杆），走的时候一颠一颠
                 foreach (var g in qGuys)
                 {
+                    if (g.vault) continue;   // 被撑杆跳叫到的人原地等着起跳
                     var p = QPos(g.slot); var tr = g.g.transform;
                     float ts = SlotS(g.slot), ds = g.s - ts;
                     if (Mathf.Abs(ds) > 0.005f)
@@ -829,7 +855,7 @@ namespace Tide
                     tr.rotation = Quaternion.Euler(0, g.yaw * Mathf.Rad2Deg, 0);
                     tr.position = new Vector3(tr.position.x, 0.25f, tr.position.z);
                 }
-                HeadTick(); HouseTick(dt); SpecialTick();
+                HeadTick(); HouseTick(dt); SpecialTick(); LiveTick(now); BlinkTick(now);
                 // 发呆 6 秒：最该点的那艘船跳一下
                 if (st.status == "play" && !demo && !intro && !ModalOpen && !OnScreen && !GuideOn) { idleT += dt; if (idleT > 6 && hintB < 0) { idleT = 3; Nudge(); } }
                 else idleT = 0;
@@ -1092,11 +1118,7 @@ namespace Tide
             UseItem("sort", () =>
             {
                 usedBooster = true; Rules.SortQ(L, st, 30);
-                for (int k = 0; k < qGuys.Count; k++)
-                {
-                    int c = st.q[vq + k];
-                    if (qGuys[k].c != c) { RecolorGuy(qGuys[k], c); var bd = qGuys[k].body; Fx.Run(() => Fx.Tween(300, p => bd.localPosition = new Vector3(0, Mathf.Sin(p * Mathf.PI) * 0.3f, 0))); }
-                }
+                SyncGuys(true);
                 sfx.Play("reveal"); Banner(T("喇叭一喊，大家排好了"), "sorted");
                 var ev = new List<Ev>(); Rules.Board(L, st, ev); RunEvents(ev);
             });

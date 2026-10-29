@@ -396,8 +396,8 @@ namespace Tide
             var rng = new Rng(7);
             foreach (int lv in (AutoTest.Arg("-tideCombo") ?? "4,8,12").Split(',').Select(int.Parse))
             {
-                PlayLevel(lv); await Fx.SleepKeep(1100); save.coins = 9999;
-                float t0 = Time.realtimeSinceStartup; int sp0 = 0, ch0 = 0, rainbowRide = 0, lvMax = 0, fvLast = 0;
+                float ld0 = Time.realtimeSinceStartup; PlayLevel(lv); float ld = Time.realtimeSinceStartup - ld0; TLog("关" + (lv + 1) + " 分波 " + (L.waves == null ? 0 : L.waves.Count + 1) + " 波，网格缩放 " + lay.gs.ToString("0.00") + "，读关 " + (ld * 1000).ToString("0") + "ms，船 " + L.boats.Count + " 人 " + L.total + "，礁石 " + L.ins.Count(v => v == 2) + " 船坞 " + L.houses.Count + " 鲨鱼 " + L.sharks.Count); await Fx.SleepKeep(1100); save.coins = 9999;
+                float t0 = Time.realtimeSinceStartup; int sp0 = 0, ch0 = 0, rainbowRide = 0, lvMax = 0, fvLast = 0, v0 = 0, vShots = 0; vaultN = 0; bool spgShot = false; int td0 = 0;
                 while (Time.realtimeSinceStartup - t0 < (pace > 600 ? 240 : 100))
                 {
                     if (ModalOpen)
@@ -407,6 +407,9 @@ namespace Tide
                         HideModal();
                     }
                     if (spMade != sp0) { sp0 = spMade; totalSp++; TLog("关" + (lv + 1) + " 连击×" + run + "人 → 特殊船 #" + spMade); if (shots < 12) { await Fx.SleepKeep(150); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "sp_" + (shots++).ToString("00") + ".png")); } }
+                    { var sg = qGuys.FirstOrDefault(g => g.x != 0 && !g.vault && g.s <= SlotS(g.slot) + 0.01f); if (sg != null && !spgShot) { spgShot = true; await Fx.SleepKeep(600); var sp = cam.WorldToScreenPoint(sg.g.transform.position); TLog("功能人在屏幕 " + sp.ToString("F0") + " 排第 " + sg.slot); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "spg_" + (lv + 1) + ".png")); await Fx.SleepKeep(500); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "spg_" + (lv + 1) + "b.png")); } }   // 功能人的长相
+                    if (vaultN != v0) { v0 = vaultN; TLog("关" + (lv + 1) + " 撑杆跳 #" + vaultN); if (vShots++ < 2) for (int i = 0; i < 9; i++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "v" + vShots + "_" + i + ".png")); await Fx.SleepKeep(110); } }   // 撑杆跳（Pole.cs）：连拍
+                    if (tideN != td0) { td0 = tideN; TLog("关" + (lv + 1) + " 涨潮 → 第 " + (L.wave + 1) + " 波，船 " + Rules.InLot(L, st).Count + " 艘，队伍 " + st.qi + "/" + st.q.Count); if (td0 <= 2) for (int i = 0; i < 20; i++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "tide" + (lv + 1) + "_" + td0 + "_" + i + ".png")); await Fx.SleepKeep(130); } }   // 涨潮（TideWave.cs）：连拍
                     lvMax = Mathf.Max(lvMax, run);
                     if (FeverTier != fvLast) { if (FeverTier > fvLast) TLog("关" + (lv + 1) + " 热潮升到 " + FeverTier + " 档（连击 " + run + " 人，上船时长 ×" + BoardSpeed + "）"); fvLast = FeverTier; if (fvLast >= 2 && fvShots < 6) { await Fx.SleepKeep(700); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "fv" + fvLast + "_" + (fvShots++) + ".png")); } }
                     if (run / 10 != ch0) { ch0 = run / 10; maxChain = Mathf.Max(maxChain, run); if (run >= 10 && shots < 12) { await Fx.SleepKeep(200); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "c_" + (shots++).ToString("00") + ".png")); } }

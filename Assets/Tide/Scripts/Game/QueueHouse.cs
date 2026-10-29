@@ -10,7 +10,7 @@ namespace Tide
 {
     public partial class Game
     {
-        Transform qDoor; Label qLbl; float qDoorT = -9999, qDoorAng;
+        Transform qDoor, qHouse; Label qLbl; float qDoorT = -9999, qDoorAng;
         const float ROPE_Y = 0.55f * QS, ROPE_SAG = 0.08f * QS, ROPE_R = 0.0675f * QS, POST_GAP = 0.85f * QS, HOUSE_HW = 0.78f;   // HOUSE_HW：小屋半宽（make_queue.py 的 HW，没乘 HSC）；栏杆跟着人放大 QS 倍
 
         // BuildScene 里调
@@ -45,7 +45,7 @@ namespace Tide
             var d = Art.Spawn("qdoor", house.transform, false);
             d.transform.localPosition = new Vector3(-HOUSE_HW - 0.02f, 0.19f, 0.18f); d.transform.localRotation = Quaternion.Euler(0, 90, 0);
             Art.AddOutline(d, Art.OutlineMat(Art.Ink, 1.3f));
-            qDoor = d.transform; qDoorAng = 0; qDoorT = -9999;
+            qDoor = d.transform; qDoorAng = 0; qDoorT = -9999; qHouse = house.transform;
             // 屋前的牌子：屋里还剩多少人（顶上原来那块"剩 N 人"去掉了；10-28 草图：贴在小屋正下方）
             qLbl = NewLabel(null, W(lay.hx - 0.15f, lay.zQ1 - 1.4f * QLG, 0.3f), "", UIKit.Cream, 15, 0, UIKit.Hex("6b4a2a"));
         }

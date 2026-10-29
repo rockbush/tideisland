@@ -22,6 +22,10 @@
 //   彩虹船会"抢"别的颜色的人，于是某个颜色的人可能先救完、那色的船还空着座位：
 //   规则加一条——某个颜色的人一个都不剩了，码头上那色的船直接开走（正常关卡座位数 = 人数，这条永远碰不到）
 //
+// 功能人（2026-10-28 用户：每种颜色以后都有一个功能人；工厂出的关卡里没有，画面层开局时 MarkSpecial 标上）：
+//   Lot.qx / State.qx 和 queue / q 一一对应，是每个人的能力（0 普通人）；q 怎么重排 qx 就怎么跟着排。
+//   撑杆跳 POLE（各种颜色都有）：他一上船，队伍里（不管排在哪）同色的人撑杆跳上这艘船，把空座补满；人不够就有几个算几个（Vault）
+//
 // ⚠ 改了 GenLevel（出关卡）里的随机数调用顺序，同一个 seed 就会变成另一关：之后要重跑工厂，重新量难度。
 using System;
 using System.Collections.Generic;
@@ -76,8 +80,10 @@ namespace Tide
         public List<House> houses = new List<House>();
         public List<Shark> sharks = new List<Shark>();
         public List<int> queue = new List<int>();
+        public List<byte> qx;       // 每个人的能力（null = 都是普通人），见文件头"功能人"
         public int berths, total;
         public Cfg cfg;
+        public List<Lot> waves; public int wave;   // 涨潮分波：后面还没进港湾的几波（null = 普通关），见 Tide()
     }
 
     public class State
@@ -86,6 +92,7 @@ namespace Tide
         public byte[] inl, load, seen;
         public int[] arr;
         public List<int> hq, berth, freed, q;
+        public List<byte> qx;    // 和 q 一一对应（null = 都是普通人）
         public int qi, clock, taps;
         public int gone;         // 离开港湾的船有几艘（海藻用）
         public double t;         // 这局过了几秒（鲨鱼用；画面层每帧更新，工厂按点击节奏推进）。< 0 = 不管鲨鱼（往前看一步时用）
@@ -97,7 +104,7 @@ namespace Tide
             {
                 occ = (short[])occ.Clone(), inl = (byte[])inl.Clone(), load = (byte[])load.Clone(), seen = (byte[])seen.Clone(),
                 arr = (int[])arr.Clone(), hq = new List<int>(hq), berth = new List<int>(berth), freed = new List<int>(freed),
-                q = new List<int>(q), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t
+                q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t
             };
         }
     }
@@ -106,6 +113,7 @@ namespace Tide
     {
         public string t, how;
         public int b = -1, k = -1, n, hit, h = -1, seat, qi;
+        public int[] list;   // vault：跳上船的人原来排在队头后面第几个
     }
 
     public struct Way { public bool free; public int n, hit; }
@@ -243,7 +251,7 @@ namespace Tide
             var s = new State
             {
                 occ = new short[L.NU * L.NV], inl = new byte[nb], load = new byte[nb], arr = new int[nb], seen = new byte[nb],
-                hq = new List<int>(), berth = new List<int>(), freed = new List<int>(), q = new List<int>(L.queue),
+                hq = new List<int>(), berth = new List<int>(), freed = new List<int>(), q = new List<int>(L.queue), qx = L.qx == null ? null : new List<byte>(L.qx),
                 qi = 0, clock = 0, status = "play", taps = 0
             };
             for (int i = 0; i < s.occ.Length; i++) s.occ[i] = -1;
@@ -340,6 +348,11 @@ namespace Tide
                 int b = s.berth[best];
                 if (ev != null) ev.Add(new Ev { t = "board", b = b, k = best, seat = s.load[b], qi = s.qi });
                 s.load[b]++; s.qi++;
+                if (s.qx != null && s.qx[s.qi - 1] == POLE && s.load[b] < L.boats[b].cap)
+                {
+                    var idx = Vault(L, s, b, c);
+                    if (idx.Count > 0 && ev != null) ev.Add(new Ev { t = "vault", b = b, k = best, h = c, n = idx.Count, list = idx.ToArray() });
+                }
                 if (s.load[b] >= L.boats[b].cap)
                 {
                     s.berth[best] = -1; s.freed[best] = ++s.clock;
@@ -379,16 +392,81 @@ namespace Tide
         }
 
         // 集合船：队伍里（还没上船的）同色的人插到最前面，最多插满这艘船的空座；其余人顺序不变。返回插了几个
-        public static int GatherQ(Lot L, State s, int b)
+        public static int GatherQ(Lot L, State s, int b) => Pull(s, L.boats[b].c, L.boats[b].cap - s.load[b]).Count;
+
+        // 撑杆跳：同上，只是颜色按功能人自己的（上的要是彩虹船也照样补满）。返回被叫到的人原来排在队头后面第几个
+        public const byte POLE = 1;
+        public static List<int> Vault(Lot L, State s, int b, int c) => Pull(s, c, L.boats[b].cap - s.load[b]);
+
+        // 队伍里颜色 c 的人（最多 need 个）插到最前面，其余人顺序不变；qx 跟着一起排
+        static List<int> Pull(State s, int c, int need)
         {
-            int c = L.boats[b].c, need = L.boats[b].cap - s.load[b];
             var a = new List<int>(); var z = new List<int>();
-            for (int i = s.qi; i < s.q.Count; i++) { int x = s.q[i]; if (x == c && a.Count < need) a.Add(x); else z.Add(x); }
-            if (a.Count == 0) return 0;
-            int ii = s.qi;
-            foreach (int x in a) s.q[ii++] = x;
-            foreach (int x in z) s.q[ii++] = x;
-            return a.Count;
+            for (int i = s.qi; i < s.q.Count; i++) { if (s.q[i] == c && a.Count < need) a.Add(i); else z.Add(i); }
+            if (a.Count > 0) { var all = new List<int>(a); all.AddRange(z); Reorder(s, all); }
+            for (int j = 0; j < a.Count; j++) a[j] -= s.qi;
+            return a;
+        }
+        // 按 order（绝对下标，从 qi 起的新顺序）重排 q 和 qx
+        static void Reorder(State s, List<int> order)
+        {
+            var q = new List<int>(); var x = s.qx == null ? null : new List<byte>();
+            foreach (int i in order) { q.Add(s.q[i]); if (x != null) x.Add(s.qx[i]); }
+            for (int j = 0; j < order.Count; j++) { s.q[s.qi + j] = q[j]; if (x != null) s.qx[s.qi + j] = x[j]; }
+        }
+
+        // 给关卡随机标功能人（10-28 用户：各种颜色都会随机出现，但概率别太高）：12 人以上的颜色才有资格，
+        // 每种有资格的颜色 30% 机会出 1 个，一关最多 2 个、至少 1 个（一个没抽中就随便挑一种颜色给 1 个）；
+        // 位置在那色人里 10%~75% 之间随机，后面总留着同色的人给他叫。
+        // 工厂不调，关卡难度量的是没有功能人的版本，功能人只会让关变容易
+        public const double SPECIAL_P = 0.3; public const int SPECIAL_MAX = 2;
+        public static void MarkSpecial(Lot L, byte ab, Rng r)
+        {
+            int nc = 0; foreach (int c in L.queue) nc = Math.Max(nc, c + 1);
+            var ok = new List<List<int>>();
+            for (int c = 0; c < nc; c++)
+            {
+                var at = new List<int>(); for (int i = 0; i < L.queue.Count; i++) if (L.queue[i] == c) at.Add(i);
+                if (at.Count >= 12) ok.Add(at);
+            }
+            if (ok.Count == 0) return;
+            var pick = new List<List<int>>();
+            foreach (var at in ok) if (pick.Count < SPECIAL_MAX && r.Next() < SPECIAL_P) pick.Add(at);
+            if (pick.Count == 0) pick.Add(ok[r.Int(ok.Count)]);
+            L.qx = new List<byte>(new byte[L.queue.Count]);
+            foreach (var at in pick) L.qx[at[(int)(at.Count * (0.1 + 0.65 * r.Next()))]] = ab;
+        }
+
+        // ---- 涨潮分波（10-29 原型）----
+        // 大关拆成几波：每波是一关完整的小关（网格一样大；礁石、船坞、鲨鱼每波各摆各的），排队 = 几波的队伍首尾接起来，所以总座位数和人数照样对得上。
+        // 港湾里的船全开走了 → 涨潮，下一波的船一起冲进港湾。船一直按小关那么大画，手指好点（大关 100 条船也不用缩小）
+        public static Lot Waves(List<Lot> w)
+        {
+            var L = w[0]; L.waves = new List<Lot>(); L.wave = 0;
+            for (int i = 1; i < w.Count; i++) { L.waves.Add(w[i]); L.queue.AddRange(w[i].queue); }
+            L.total = L.queue.Count;
+            return L;
+        }
+        public static bool TideDue(Lot L, State s)
+        {
+            if (L.waves == null || L.wave >= L.waves.Count || s.status != "play") return false;
+            for (int b = 0; b < L.boats.Count; b++) if (s.inl[b] != 0) return false;
+            for (int h = 0; h < L.houses.Count; h++) if (s.hq[h] < L.houses[h].list.Count) return false;
+            return true;
+        }
+        // 下一波的船接在 L.boats 后面（下标整体往后挪），一起放进港湾；礁石（ins）、船坞、鲨鱼换成这一波的
+        public static void Tide(Lot L, State s, List<Ev> ev)
+        {
+            var W = L.waves[L.wave++]; int off = L.boats.Count;
+            foreach (var B in W.boats) { if (B.lockBy >= 0) B.lockBy += off; if (B.weed > 0) B.weed += s.gone; L.boats.Add(B); }
+            foreach (var H in W.houses) for (int i = 0; i < H.list.Count; i++) H.list[i] += off;
+            L.ins = W.ins; L.houses = W.houses; L.sharks = W.sharks;
+            s.hq = new List<int>(); for (int h = 0; h < L.houses.Count; h++) s.hq.Add(0);
+            int nb = L.boats.Count;
+            Array.Resize(ref s.inl, nb); Array.Resize(ref s.load, nb); Array.Resize(ref s.arr, nb); Array.Resize(ref s.seen, nb);
+            for (int b = off; b < nb; b++) if (L.boats[b].h < 0) Put(L, s, b);
+            Spawn(L, s, null); Reveal(L, s, null);
+            if (ev != null) ev.Add(new Ev { t = "tide", b = off, n = nb - off, k = L.wave });
         }
 
         public static void AddBerth(Lot L, State s) { s.berth.Add(-1); s.freed.Add(0); if (s.status == "lose") s.status = "play"; }
@@ -400,12 +478,10 @@ namespace Tide
             foreach (int b in s.berth) if (b >= 0) rem[L.boats[b].c] += L.boats[b].cap - s.load[b];
             int end = Math.Min(s.q.Count, s.qi + W);
             var a = new List<int>(); var z = new List<int>();
-            for (int i = s.qi; i < end; i++) { int c = s.q[i]; if (rem[c] > 0) { rem[c]--; a.Add(c); } else z.Add(c); }
+            for (int i = s.qi; i < end; i++) { int c = s.q[i]; if (rem[c] > 0) { rem[c]--; a.Add(i); } else z.Add(i); }
             if (a.Count == 0) return 0;
-            int ii = s.qi;
-            foreach (int c in a) s.q[ii++] = c;
-            foreach (int c in z) s.q[ii++] = c;
-            return a.Count;
+            int n = a.Count; a.AddRange(z); Reorder(s, a);
+            return n;
         }
 
         // ---- 认真玩家（关卡工厂量难度用；游戏里的提示和演示也用它） ----
@@ -787,6 +863,7 @@ namespace Tide
         public static void Recolor(Lot L, int[] map)
         {
             foreach (var B in L.boats) B.c = map[B.c];
+            if (L.waves != null) foreach (var W in L.waves) foreach (var B in W.boats) B.c = map[B.c];
             for (int i = 0; i < L.queue.Count; i++) L.queue[i] = map[L.queue[i]];
         }
 

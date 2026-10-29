@@ -42,7 +42,7 @@ namespace Tide
         void HeadTick()
         {
             if (!headArm) return;
-            var g = qGuys.Count > 0 ? qGuys[0] : null;
+            var g = qGuys.Count > 0 && !qGuys[0].vault ? qGuys[0] : null;
             if (g != headGuy)
             {
                 if (headRim) Destroy(headRim);

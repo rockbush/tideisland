@@ -23,7 +23,13 @@ namespace Tide
 
         void MechReset()
         {
-            mechV = new MechV[L.boats.Count]; sharkV.Clear();
+            mechV = new MechV[L.boats.Count];
+            SharkViews();
+        }
+        void SharkViews()   // 涨潮换下一波时鲨鱼也换（TideWave.cs）
+        {
+            foreach (var (g0, k0) in sharkV) if (g0) Destroy(g0.gameObject);
+            sharkV.Clear();
             for (int k = 0; k < L.sharks.Count; k++)
             {
                 var g = Art.Spawn("shark", world, false).transform; g.localScale = Vector3.one * 1.5f * lay.gs;

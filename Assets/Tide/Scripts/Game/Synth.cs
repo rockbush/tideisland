@@ -174,6 +174,10 @@ namespace Tide
             Add("unlock", 0.45f, b => { float[] fs = { 660, 880, 1320 }; for (int i = 0; i < 3; i++) Tone(b, fs[i], 0.16f, "triangle", 0.12f, i * 0.08f); });
             Add("crack", 0.35f, b => { Noise(b, 0.09f, 0.2f, 6000, 1800); Tone(b, 1900, 0.12f, "square", 0.04f, 0.01f, 900); Tone(b, 2600, 0.2f, "triangle", 0.05f, 0.03f, 2300); });   // 锁碎掉：咔嚓一声 + 一点金属叮
             for (int j = 1; j <= 3; j++) { int jj = j; Add("star" + j, 0.3f, b => { Tone(b, 660 + jj * 220, 0.18f, "triangle", 0.12f); Tone(b, 500 + (jj + 1) * 90, 0.09f, "triangle", 0.1f, 0, 900 + (jj + 1) * 90); }); }
+            // 涨潮（TideWave.cs）：蓄力的低沉隆隆声 → 浪扫过来的呼啸（噪声往上扫）→ 拍岸的哗啦一声 + 低音
+            Add("rumble", 0.8f, b => { Noise(b, 0.7f, 0.14f, 160, 520); Tone(b, 48, 0.7f, "sine", 0.14f, 0, 75); });
+            Add("wave", 1.3f, b => { Noise(b, 1.1f, 0.2f, 350, 2800); Noise(b, 0.5f, 0.08f, 4200, 2200, 0.7f); });
+            Add("crash", 1.2f, b => { Noise(b, 1.0f, 0.28f, 3000, 280); Tone(b, 72, 0.45f, "sine", 0.22f, 0, 40); });
             Add("thunder", 1.8f, b => { Noise(b, 1.7f, 0.22f, 380, 50); Noise(b, 0.5f, 0.12f, 1600, 300, 0.05f); Tone(b, 52, 1.4f, "sine", 0.12f, 0, 38); });
             var fc = Resources.Load<AudioClip>("Audio/music_calm"); var ft = Resources.Load<AudioClip>("Audio/music_tense");
             calm = fc ? fc : MusicLoop(false);
