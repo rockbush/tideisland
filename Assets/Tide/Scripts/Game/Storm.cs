@@ -1,5 +1,7 @@
-// 风暴（第 4 关起）：倒计时条 + 天气演出。规则见 Rules.cs 开头（cfg.storm 秒，开走一艘满船 +cfg.bonus 秒）。
-// 计时：点第一下才开始走；弹窗、菜单、开始界面/地图、看广告时停。走完 = 输（可以看广告/花金币 +20 秒）。
+// 风暴（第 4 关起，cfg.storm > 0 的关）：倒计时条 + 天气演出。
+// 10-30 用户改规则：开局 30 秒，最多攒到 99 秒，每上船一个人 +0.75 秒（原来是开走一艘满船 +7 秒、上限 120）；
+// 风暴走完输了，看广告/花金币复活 → 倒计时回到 30 秒。
+// 计时：点第一下才开始走；弹窗、菜单、开始界面/地图、看广告、涨潮动画时停。
 // 紧张感全靠画面慢慢压上来，不用红屏和警报：天变暗、下雨、偶尔打雷、潮水漫上沙滩、岛民越来越慌、最后变成紧张的音乐。
 using System.Collections.Generic;
 using UnityEngine;
@@ -10,12 +12,13 @@ namespace Tide
 {
     public partial class Game
     {
-        const float STORM_REVIVE = 20;
+        const float STORM_CAP = 99, STORM_PER = 0.75f;   // 上限、每上船一个人加几秒
+        float STORM_START => save.stormStart > 0 ? save.stormStart : 30;   // 开局秒数（复活也回到这个数）：10-30 用户要在设置里调（开发用，SaveData.stormStart）
         float stormLeft, stormMax, stormCap, stormK, flashT, thunderT;
         bool stormOn, stormLose, stormWarned;
         RectTransform stormRow, rainRoot, stormCloud; Image stormFill, flashImg; Text stormTxt;
         readonly List<RectTransform> rain = new List<RectTransform>();
-        Transform flood; Material floodMat, seaMat;
+        Material seaMat;
         // 晴天时的灯光（风暴越近越往暗里拉）
         Color sun0, sky0, eq0, gnd0, bg0; float sunI0;
 
@@ -51,37 +54,20 @@ namespace Tide
             flashImg = UIKit.Img(rainRoot, "flash", null, new Color(1, 1, 1, 0)); flashImg.rectTransform.Stretch(-50, -50, -50, -50);
         }
 
-        // 沙滩上的潮水：一块半透明的水，风暴越近从岸边往队伍那边漫得越多（岛民脚泡在水里）
-        void StormScene()
-        {
-            var q = GameObject.CreatePrimitive(PrimitiveType.Quad); Destroy(q.GetComponent<Collider>());
-            q.name = "flood"; q.transform.SetParent(world); q.transform.rotation = Quaternion.Euler(90, 0, 0);
-            floodMat = new Material(Art.UnlitT); floodMat.SetColor("_BaseColor", new Color(0.45f, 0.78f, 0.92f, 0));
-            q.GetComponent<MeshRenderer>().sharedMaterial = floodMat;
-            flood = q.transform;
-            SetFlood(0);
-        }
-        void SetFlood(float d)
-        {
-            if (!flood) return;
-            float far = lay.zQ2 - QLG / 2 - 0.2f, len = Mathf.Max(0.01f, (lay.zP - 0.15f - far) * d);
-            float w = 2 * lay.xQ + 3;
-            flood.position = W(0, lay.zP - 0.15f - len / 2, 0.27f);
-            flood.localScale = new Vector3(w, len, 1);
-            floodMat.SetColor("_BaseColor", new Color(0.45f, 0.78f, 0.92f, d > 0.01f ? 0.5f : 0));
-        }
+        // 10-30 原来码头往排队区漫的那块潮水换成椰子树后面的海浪（Surge.cs）
+        void StormScene() => SurgeScene();
 
         void StormReset()
         {
             stormOn = L.cfg.storm > 0;
-            stormMax = (float)L.cfg.storm; stormLeft = stormMax; stormCap = stormMax;   // 上限就是开局秒数（10-26 用户：上限 120 秒，别 +10）
+            stormMax = STORM_START; stormLeft = STORM_START; stormCap = STORM_CAP;   // stormMax：天气按它变暗（剩 30 秒以内才开始压过来）；进度条按上限 99 算
             stormLose = stormWarned = false; stormK = 0; flashT = 0; thunderT = 3;
             if (stormRow) { stormRow.gameObject.SetActive(stormOn); ui.qfill.gameObject.SetActive(!stormOn); ui.gift.gameObject.SetActive(!stormOn); }
             ApplyWeather(0);
             UpdateStormBar();
         }
 
-        bool StormPaused => !stormOn || demo || GuideOn || st == null || st.status != "play" || st.taps == 0 || ModalOpen || OnScreen || menuOpen || (ui.ad && ui.ad.gameObject.activeSelf);
+        bool StormPaused => !stormOn || demo || GuideOn || st == null || st.status != "play" || st.taps == 0 || intro || ModalOpen || OnScreen || menuOpen || (ui.ad && ui.ad.gameObject.activeSelf);
 
         void StormTick(float dt)
         {
@@ -96,7 +82,7 @@ namespace Tide
             target = Mathf.Max(0, target - FeverStormEase);   // 连击狂潮：乌云往后退（只是画面，Fever.cs）
             if (stormOn && st != null && st.status == "win") target = Mathf.Max(0, stormK - dt * 0.4f);    // 赢了天慢慢放晴
             stormK = Mathf.MoveTowards(stormK, target, dt * 0.6f);
-            ApplyWeather(stormK);
+            ApplyWeather(stormK); SurgeTick(dt, Fx.Now);
             UpdateStormBar();
             // 雨
             float d = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.35f, 1f, stormK));
@@ -134,7 +120,7 @@ namespace Tide
             RenderSettings.ambientGroundColor = Color.Lerp(gnd0, UIKit.Hex("5d7385"), d);
             cam.backgroundColor = Color.Lerp(bg0, UIKit.Hex("51657a"), d);
             if (seaMat) seaMat.SetColor("_BaseColor", Color.Lerp(Color.white, new Color(0.62f, 0.7f, 0.8f), d));
-            SetFlood(Mathf.InverseLerp(0.3f, 1f, k));
+
             sfx.stormT = d;
         }
 
@@ -149,14 +135,15 @@ namespace Tide
             if (stormCloud) stormCloud.localScale = Vector3.one * (u < 0.25f ? 1 + 0.08f * Mathf.Sin(Fx.Now / 120) : 1);   // 快到了小乌云抖起来
         }
 
-        // 开走一艘满船：风暴往后推一点
-        void StormBonus()
+        // 上船的人：每人风暴往后推 STORM_PER 秒（一次事件里上了几个人合起来飘一个字）
+        void StormBonus(int n)
         {
-            if (!stormOn || st.status == "win") return;
-            stormLeft = Mathf.Min(stormCap, stormLeft + (float)L.cfg.bonus);
+            if (!stormOn || n <= 0 || st.status == "win") return;
+            float add = n * STORM_PER;
+            stormLeft = Mathf.Min(stormCap, stormLeft + add);
             var c = new Vector3[4]; stormRow.GetWorldCorners(c);
             var r = OnCanvas("sb"); r.sizeDelta = new Vector2(80, 26);
-            var t = UIKit.Txt(r, "t", "+" + L.cfg.bonus.ToString("0.#") + T("秒"), 16, UIKit.Hex("bfe3ff"), TextAnchor.MiddleCenter, true); t.rectTransform.Stretch();
+            var t = UIKit.Txt(r, "t", "+" + add.ToString("0.##") + T("秒"), 16, UIKit.Hex("bfe3ff"), TextAnchor.MiddleCenter, true); t.rectTransform.Stretch();
             var p0 = ToCanvas(new Vector3((c[0].x + c[2].x) / 2, c[0].y - 8 * ui.scale, 0));
             r.anchoredPosition = p0;
             Fx.Run(async () => { await Fx.Tween(700, p => { if (r) { r.anchoredPosition = p0 + new Vector2(0, -6 - 18 * p); t.color = new Color(0.75f, 0.89f, 1, 1 - p * p); } }); if (r) Destroy(r.gameObject); });
@@ -165,10 +152,10 @@ namespace Tide
         void StormHit()
         {
             if (st.status != "play") return;
-            st.status = "lose"; stormLose = true; HideHand(); SetCrane(false);
-            Fx.Run(LoseFx);
+            st.status = "lose"; stormLose = true; HideHand(); SetCrane(false);   // 10-30：先来一场超级海啸（Surge.cs）再弹失败
+            Fx.Run(TsunamiFx);
         }
 
-        void StormRevive() { stormLose = false; stormLeft = Mathf.Min(stormCap, stormLeft + STORM_REVIVE); st.status = "play"; Banner(F("风暴推迟 {0} 秒", STORM_REVIVE), "delay"); }
+        void StormRevive() { stormLose = false; stormLeft = STORM_START; st.status = "play"; Fx.Run(UnWreckFx); Banner(F("风暴推迟 {0} 秒", STORM_START), "delay"); }   // 复活：倒计时回到 30 秒
     }
 }

@@ -83,7 +83,7 @@ namespace Tide
         public List<byte> qx;       // 每个人的能力（null = 都是普通人），见文件头"功能人"
         public int berths, total;
         public Cfg cfg;
-        public List<Lot> waves; public int wave;   // 涨潮分波：后面还没进港湾的几波（null = 普通关），见 Tide()
+        public List<Lot> waves; public int wave, waveOff;   // 涨潮分波：后面还没进港湾的几波（null = 普通关）、这一波第一艘船的下标，见 Tide()
     }
 
     public class State
@@ -93,6 +93,7 @@ namespace Tide
         public int[] arr;
         public List<int> hq, berth, freed, q;
         public List<byte> qx;    // 和 q 一一对应（null = 都是普通人）
+        public List<int> wait = new List<int>();   // 涨潮时还在海上等的船（位置被上一波剩下的船占着 / 挡着它的出路），见 Unwait
         public int qi, clock, taps;
         public int gone;         // 离开港湾的船有几艘（海藻用）
         public double t;         // 这局过了几秒（鲨鱼用；画面层每帧更新，工厂按点击节奏推进）。< 0 = 不管鲨鱼（往前看一步时用）
@@ -104,7 +105,7 @@ namespace Tide
             {
                 occ = (short[])occ.Clone(), inl = (byte[])inl.Clone(), load = (byte[])load.Clone(), seen = (byte[])seen.Clone(),
                 arr = (int[])arr.Clone(), hq = new List<int>(hq), berth = new List<int>(berth), freed = new List<int>(freed),
-                q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t
+                q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), wait = new List<int>(wait), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t
             };
         }
     }
@@ -324,7 +325,7 @@ namespace Tide
             s.inl[b] = 0; s.berth[k] = b; s.arr[b] = ++s.clock; s.taps++; s.gone++;
             if (ev != null) ev.Add(new Ev { t = "go", b = b, k = k, how = how });
             if (L.boats[b].sp == 1 && GatherQ(L, s, b) > 0 && ev != null) ev.Add(new Ev { t = "gather", b = b, k = k });
-            Spawn(L, s, ev); Reveal(L, s, ev); Board(L, s, ev);
+            Spawn(L, s, ev); Unwait(L, s, ev); Reveal(L, s, ev); Board(L, s, ev);
         }
 
         // 上船：队头的人找同色、有空座的船（先到的先坐满）；坐满就开走
@@ -417,7 +418,7 @@ namespace Tide
 
         // 给关卡随机标功能人（10-28 用户：各种颜色都会随机出现，但概率别太高）：12 人以上的颜色才有资格，
         // 每种有资格的颜色 30% 机会出 1 个，一关最多 2 个、至少 1 个（一个没抽中就随便挑一种颜色给 1 个）；
-        // 位置在那色人里 10%~75% 之间随机，后面总留着同色的人给他叫。
+        // 位置在那色人里 10%~75% 之间随机，后面总留着同色的人给他叫；左右两边不能是同色的人（10-30），10%~75% 里没有就放宽到整色，整色都是成串的就不放。
         // 工厂不调，关卡难度量的是没有功能人的版本，功能人只会让关变容易
         public const double SPECIAL_P = 0.3; public const int SPECIAL_MAX = 2;
         public static void MarkSpecial(Lot L, byte ab, Rng r)
@@ -434,8 +435,18 @@ namespace Tide
             foreach (var at in ok) if (pick.Count < SPECIAL_MAX && r.Next() < SPECIAL_P) pick.Add(at);
             if (pick.Count == 0) pick.Add(ok[r.Int(ok.Count)]);
             L.qx = new List<byte>(new byte[L.queue.Count]);
-            foreach (var at in pick) L.qx[at[(int)(at.Count * (0.1 + 0.65 * r.Next()))]] = ab;
+            foreach (var at in pick)
+            {
+                // 10-30 用户：功能人要单独出现，左右两边不能是同色的人（夹在一串同色里，一叫就少了爽感）
+                int lo = (int)(at.Count * 0.1), hi = Math.Max(lo + 1, (int)(at.Count * 0.75));
+                var ok1 = new List<int>();
+                for (int j = lo; j < hi && j < at.Count; j++) { int i = at[j]; if (Lone(L.queue, i)) ok1.Add(i); }
+                if (ok1.Count == 0) for (int j = 0; j < at.Count; j++) if (Lone(L.queue, at[j])) ok1.Add(at[j]);   // 10%~75% 里没有，就放宽到整色
+                if (ok1.Count == 0) continue;   // 这色全是成串的，不放
+                L.qx[ok1[r.Int(ok1.Count)]] = ab;
+            }
         }
+        static bool Lone(List<int> q, int i) => (i == 0 || q[i - 1] != q[i]) && (i == q.Count - 1 || q[i + 1] != q[i]);
 
         // ---- 涨潮分波（10-29 原型）----
         // 大关拆成几波：每波是一关完整的小关（网格一样大；礁石、船坞、鲨鱼每波各摆各的），排队 = 几波的队伍首尾接起来，所以总座位数和人数照样对得上。
@@ -447,12 +458,74 @@ namespace Tide
             L.total = L.queue.Count;
             return L;
         }
+        // 什么时候涨潮：① 港湾清空了；或者 ② 队头那个人的颜色，港湾里、码头上都没有能坐的船了。
+        // ②（10-30 用户发现会卡关）：人按颜色上船、不分哪一波——撑杆跳、集合船会把后面波次的同色人提前拉上船，彩虹船谁都能坐，
+        // 这一波剩下的人和剩下的船颜色就对不上：队头要的颜色港湾里没有，港湾又清不空，潮永远不来。
+        // （试过"剩 3 艘就涨潮"：机器人对照 6 关只赢 1 关，清空才涨潮赢 4 关——平时还是等清空，只在真要卡住时提前）
         public static bool TideDue(Lot L, State s)
         {
             if (L.waves == null || L.wave >= L.waves.Count || s.status != "play") return false;
-            for (int b = 0; b < L.boats.Count; b++) if (s.inl[b] != 0) return false;
+            if (s.wait.Count > 0) return false;
             for (int h = 0; h < L.houses.Count; h++) if (s.hq[h] < L.houses[h].list.Count) return false;
-            return true;
+            bool empty = true; for (int b = 0; b < L.boats.Count; b++) if (s.inl[b] != 0) { empty = false; break; }
+            return empty || (s.qi < s.q.Count && !HasSeat(L, s, s.q[s.qi]));
+        }
+        // 颜色 c 的人现在有没有船可坐：码头上同色（或彩虹船）还有空座，或者港湾里有这个颜色的船
+        static bool HasSeat(Lot L, State s, int c)
+        {
+            foreach (int b in s.berth) if (b >= 0 && (L.boats[b].c == c || L.boats[b].sp == 2) && s.load[b] < L.boats[b].cap) return true;
+            for (int b = 0; b < L.boats.Count; b++) if (s.inl[b] != 0 && L.boats[b].c == c) return true;
+            return false;
+        }
+
+        // 上一波剩下的船占着的格子 + 它们开出去要走的路（新一波的礁石落在这上面就去掉）
+        static HashSet<int> OldLanes(Lot L, State s)
+        {
+            var a = new HashSet<int>();
+            for (int b = 0; b < L.waveOff; b++)
+            {
+                if (s.inl[b] == 0) continue;
+                var B = L.boats[b]; foreach (int j in B.cells) a.Add(j);
+                for (int j = StepC(L, B.cells[B.cells.Length - 1], B.d); j >= 0; j = StepC(L, j, B.d)) a.Add(j);
+            }
+            return a;
+        }
+        // 港湾里的船再加上 add 这几艘，是不是还能一艘接一艘全开出去（不管排队顺序）。
+        // 海藻按开走的船数松开、锁链要钥匙船先走（钥匙船还在海上等 = 一直锁着），都算进去，不然会放出一个谁都动不了的港湾
+        static bool AllOut(Lot L, State s, List<int> add)
+        {
+            var occ = (short[])s.occ.Clone(); var alive = InLot(L, s); var gone = new HashSet<int>(); int n = s.gone;
+            foreach (int b in add) { foreach (int j in L.boats[b].cells) { if (occ[j] >= 0) return false; occ[j] = (short)b; } alive.Add(b); }
+            for (bool moved = true; moved && alive.Count > 0; )
+            {
+                moved = false;
+                for (int i = alive.Count - 1; i >= 0; i--)
+                {
+                    var B = L.boats[alive[i]];
+                    if (B.weed > n) continue;
+                    if (B.lockBy >= 0 && s.arr[B.lockBy] == 0 && !gone.Contains(B.lockBy)) continue;
+                    bool free = true;
+                    for (int j = StepC(L, B.cells[B.cells.Length - 1], B.d); j >= 0; j = StepC(L, j, B.d)) if (L.ins[j] >= 2 || occ[j] >= 0) { free = false; break; }
+                    if (!free) continue;
+                    foreach (int j in B.cells) occ[j] = -1; gone.Add(alive[i]); alive.RemoveAt(i); n++; moved = true;
+                }
+            }
+            return alive.Count == 0;
+        }
+        // 海上等着的船：位置空出来、放进去也不会和别的船互相卡死，就进港湾
+        static void Unwait(Lot L, State s, List<Ev> ev)
+        {
+            for (bool any = true; any && s.wait.Count > 0; )   // 放进一艘（比如钥匙船）可能让前面没放成的也能放了，再过一遍
+            {
+                any = false;
+                for (int i = 0; i < s.wait.Count; i++)
+                {
+                    int b = s.wait[i];
+                    if (!AllOut(L, s, new List<int> { b })) continue;
+                    Put(L, s, b); s.wait.RemoveAt(i--); any = true;
+                    if (ev != null) ev.Add(new Ev { t = "tidein", b = b });
+                }
+            }
         }
         // 下一波的船接在 L.boats 后面（下标整体往后挪），一起放进港湾；礁石（ins）、船坞、鲨鱼换成这一波的
         public static void Tide(Lot L, State s, List<Ev> ev)
@@ -460,11 +533,24 @@ namespace Tide
             var W = L.waves[L.wave++]; int off = L.boats.Count;
             foreach (var B in W.boats) { if (B.lockBy >= 0) B.lockBy += off; if (B.weed > 0) B.weed += s.gone; L.boats.Add(B); }
             foreach (var H in W.houses) for (int i = 0; i < H.list.Count; i++) H.list[i] += off;
-            L.ins = W.ins; L.houses = W.houses; L.sharks = W.sharks;
+            L.waveOff = off;
+            // 新一波的礁石要是正好压在剩下的船身上、或者挡着它们的出路，就不要了（不然那艘船永远开不出去）
+            var ins = (byte[])W.ins.Clone(); var old = OldLanes(L, s);
+            foreach (int j in old) if (ins[j] == 2) ins[j] = 1;
+            L.ins = ins; L.houses = W.houses; L.sharks = W.sharks;
             s.hq = new List<int>(); for (int h = 0; h < L.houses.Count; h++) s.hq.Add(0);
             int nb = L.boats.Count;
             Array.Resize(ref s.inl, nb); Array.Resize(ref s.load, nb); Array.Resize(ref s.arr, nb); Array.Resize(ref s.seen, nb);
-            for (int b = off; b < nb; b++) if (L.boats[b].h < 0) Put(L, s, b);
+            // 新船一艘艘试着放：压着剩下的船、或者放进去会和剩下的船互相卡死（谁都开不出去）的，先在海上等（Unwait）；其余的一起冲进港湾
+            var put = new List<int>();
+            for (int b = off; b < nb; b++)
+            {
+                if (L.boats[b].h >= 0) continue;
+                put.Add(b);
+                if (!AllOut(L, s, put)) { put.RemoveAt(put.Count - 1); s.wait.Add(b); }
+            }
+            foreach (int b in put) Put(L, s, b);
+            Unwait(L, s, null);   // 锁链船的钥匙船排在它后面才放下的，再过一遍，能放的一起冲进来
             Spawn(L, s, null); Reveal(L, s, null);
             if (ev != null) ev.Add(new Ev { t = "tide", b = off, n = nb - off, k = L.wave });
         }

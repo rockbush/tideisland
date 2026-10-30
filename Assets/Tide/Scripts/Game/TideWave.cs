@@ -2,7 +2,8 @@
 //   用户：画面比例调完以后，手机上 2 人竹筏太小，手指不好点；后面有 100 条船也想让船别缩太小。
 //   → 港湾大到要缩小才塞得进屏幕的关（GridScale < 1.0，船比前 11 关小一成以上），不再整张缩小，而是拆成几波小港湾：
 //     横平竖直的关每波 6×8、斜放的关每波 5×9 斜，都和前 11 关一样大（gs ≈ 1.1）。
-//   港湾里的船全开走了 → 一道浪从屏幕下面扫上来，下一波的船被浪甩进港湾。规则见 Rules.Tide
+//   港湾清空、或者队头那个人的颜色已经没船可坐（见 Rules.TideDue）→ 一道浪从屏幕下面扫上来，下一波的船被浪甩进港湾。规则见 Rules.Tide
+//   新一波里压着剩下那几艘船、或者挡着它们出路的船先在海上等，路让出来了再冲进来（TideIn）
 // 波数 = 原来港湾的格子数 ÷ 每波的格子数（四舍五入），船的总数和原来差不多；算出来只有 1 波 = 直接换成小港湾。
 // 每波都照这关的配置摆（礁石按面积缩、船坞 / 海藻 / 锁链 / 鲨鱼 / 白船照搬），levels.json 没动
 using System.Collections.Generic;
@@ -15,7 +16,7 @@ namespace Tide
     public partial class Game
     {
         const float TIDE_GS = 1.0f;    // 整张港湾的缩放小于这个就分波
-        int tideN;                     // 这一局涨了几次潮（自动测试看）
+        int tideN, tideInN;            // 这一局涨了几次潮、海上等的船进港了几艘（自动测试看）
 
         static int WaterCells(Lot x) { int n = 0; foreach (var v in x.ins) if (v == 1) n++; return n; }
         static Cfg CloneCfg(Cfg c) => JsonUtility.FromJson<Cfg>(JsonUtility.ToJson(c));
@@ -81,7 +82,7 @@ namespace Tide
             tx.Apply(); return waveTex = tx;
         }
 
-        // RunEvents 最后调：港湾空了、后面还有波，就涨潮
+        // RunEvents 最后、Update 每帧调：港湾清空或者队头颜色没船了、后面还有波，就涨潮
         readonly List<(Transform t, Vector3 s)> decoPop = new List<(Transform, Vector3)>();
         void TideCheck()
         {
@@ -139,6 +140,7 @@ namespace Tide
             sfx.Play("wave"); Haptics.Play(Haptics.Kind.Medium);
             var todo = new List<int>(); for (int b = e.b; b < e.b + e.n; b++) if (boatV[b] != null) todo.Add(b);
             var dp = new List<(Transform t, Vector3 s)>(decoPop);
+            var olds = new List<int>(); for (int b = 0; b < e.b; b++) if (st.inl[b] != 0) olds.Add(b);
             var pops = new List<Task>(); float spray = 0; int popN = 0;
             await Fx.Tween(1000, p =>
             {
@@ -156,6 +158,13 @@ namespace Tide
                     var (dt, ds) = dp[i]; if (!dt) { dp.RemoveAt(i); continue; }
                     if (dt.position.z > zc - 0.2f) continue;
                     dp.RemoveAt(i); Fx.Run(() => Fx.Tween(300, q => { if (dt) dt.localScale = ds * Mathf.Max(0.001f, Fx.BackOut(q)); }));
+                }
+                for (int i = olds.Count - 1; i >= 0; i--)   // 上一波剩下的船：浪头过来颠一下
+                {
+                    var ou = boatV[olds[i]]; if (ou == null || !ou.g || ou.state != "lot") { olds.RemoveAt(i); continue; }
+                    if (ou.g.transform.position.z > zc) continue;
+                    olds.RemoveAt(i); var og = ou.g.transform; ou.bob = false;
+                    Fx.Run(async () => { await Fx.Tween(500, q => { if (!og) return; var v = og.position; v.y = Mathf.Abs(Mathf.Sin(q * Mathf.PI)) * 0.55f; og.position = v; og.rotation = Quaternion.Euler(Mathf.Sin(q * Mathf.PI * 2) * 10, ou.yaw * Mathf.Rad2Deg, 0); }); if (og) og.rotation = Quaternion.Euler(0, ou.yaw * Mathf.Rad2Deg, 0); if (ou.state == "lot") ou.bob = true; });
                 }
                 for (int i = todo.Count - 1; i >= 0; i--)
                 {
@@ -192,6 +201,29 @@ namespace Tide
             if (wall) Destroy(wall.gameObject);
             if (carpet) Destroy(carpet.gameObject);
             Destroy(wm); Destroy(cm);
+        }
+
+        // 涨潮时在海上等着的船（位置被上一波剩下的船占着 / 挡着它们的出路）：那几艘开走了，从港湾下边冲进来，落水溅一下
+        void TideIn(int b)
+        {
+            if (b >= boatV.Length) System.Array.Resize(ref boatV, L.boats.Count);
+            if (b >= mechV.Length) System.Array.Resize(ref mechV, L.boats.Count);
+            AddBoatView(b, true); AddMechView(b); tideInN++;
+            var u = boatV[b]; var g = u.g.transform; var h = BoatHome(b); u.bob = false; int t = tok;
+            var from = h.pos + new Vector3(0, 0.6f, -1.6f);
+            Fx.Run(async () =>
+            {
+                await Fx.Tween(320, p =>
+                {
+                    if (t != tok || !g) return;
+                    var q = Vector3.Lerp(from, h.pos, p); q.y = Mathf.Lerp(from.y, 0, p) + Mathf.Sin(p * Mathf.PI) * 0.5f;
+                    g.position = q; g.localScale = Vector3.one * Mathf.Max(0.001f, Mathf.Lerp(0.5f, 1, p)) * lay.gs;
+                });
+                if (t != tok || !g) return;
+                g.position = h.pos; g.localScale = Vector3.one * lay.gs;
+                Burst(h.pos + Vector3.up * 0.2f, Color.white, 6, 0.8f); Ripple(h.pos); sfx.Play("pop2");
+                if (u.state == "lot") u.bob = true;
+            });
         }
 
         // 一艘船被浪头甩出来：从浪尖往前抛，转一圈落到自己的格子上，砸出水花和一圈水波，压扁弹一下

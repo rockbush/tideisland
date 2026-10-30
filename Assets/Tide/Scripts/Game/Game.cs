@@ -42,6 +42,7 @@ namespace Tide
         LevelEntry[] LEVELS;
         Lot L;
         State st;
+        const bool SHARKS = false, HOUSES = false;   // 鲨鱼、船坞开关（10-30 暂时不用）
         const float HEAD_S = 0.12f, HEAD_WAIT = 350;   // 离队头多近才出发（米）、最多等多久（毫秒）
         int aRuns; float aMax;   // 自动测试看：A 兜底用了几次、最远从多远跑过来
         int boardQ;   // 排着等上船的人数（BoardFx 还没开始的）
@@ -169,8 +170,10 @@ namespace Tide
             ClearUIFx();   // 动画都丢掉了，飘在屏幕上的彩纸、飞金币、提示字也得一起删，不然会定在画面上
             save.level = i; save.Persist();
             var lv = LEVELS[i];
+            if (!HOUSES && lv.cfg.houses > 0) { var hc = CloneCfg(lv.cfg); hc.houses = 0; lv = new LevelEntry { cfg = hc, seed = lv.seed, p = lv.p }; }   // 10-30 用户：船坞先屏蔽。船坞生成时就占格子、带自己的船，只能出关前去掉（这几关的摆法会变）
             int tw = TideCount(lv.cfg);   // 港湾大到船要缩小的关拆成几波，涨潮一波一波送进来（TideWave.cs）
             L = tw > 0 ? TideLevel(lv, tw) : Rules.LoadLevel(lv);
+            if (!SHARKS) { L.sharks.Clear(); if (L.waves != null) foreach (var w in L.waves) w.sharks.Clear(); }   // 10-30 用户：鲨鱼先屏蔽（关卡照常生成，只是不放鲨鱼，摆法不变）
             tideN = 0;
             RecolorForTry(i);
             if (i >= POLE_LV) Rules.MarkSpecial(L, Rules.POLE, new Rng(i * 7919 + save.Tries(i) * 131 + 17));   // 撑杆跳功能人，各种颜色随机（Pole.cs）；每次重玩换位置
@@ -525,18 +528,21 @@ namespace Tide
 
         void RunEvents(List<Ev> ev)
         {
+            int boarded = 0;
             foreach (var e in ev)
             {
                 var E = e;
                 if (e.t == "go") { var gate = gates[e.k].p; BLog("派船 船" + E.b + " → 泊位" + E.k + (E.how == "crane" ? "（直升机）" : "") + " 门" + (gate.IsCompleted ? "开" : "关(等船" + gates[E.k].owner + ")")); Fx.Run(() => SailFx(E.b, E.k, E.how, gate)); }
                 else if (e.t == "spawn") Fx.Run(() => SpawnFx(E.b, E.h));
                 else if (e.t == "reveal") Fx.Run(() => RevealFx(E.b));
+                else if (e.t == "tidein") TideIn(E.b);   // 涨潮时在海上等着的船，路让出来了冲进港湾（TideWave.cs）
                 else if (e.t == "bump") { Fx.Run(() => BumpFx(E.b, E.n, E.hit)); if (E.hit == -3) SharkSnap(E.k); }
-                else if (e.t == "board") { boardQ++; QueueFx(() => BoardFx(E)); }
+                else if (e.t == "board") { boardQ++; boarded++; QueueFx(() => BoardFx(E)); }
                 else if (e.t == "gather") GatherFx(E);   // 集合船靠岸：队伍重新上色（Special.cs）
                 else if (e.t == "vault") QueueFx(() => VaultFx(E));   // 撑杆跳功能人上船了（Pole.cs）
                 else if (e.t == "leave") { var d = new Gate { owner = e.b, stage = "queued" }; gates[e.k] = d; QueueFx(() => { Fx.Run(() => LeaveFx(E, d)); return Task.CompletedTask; }); }
             }
+            StormBonus(boarded);   // 每上船一个人风暴推后 0.75 秒（Storm.cs）
             TideCheck();   // 港湾空了、后面还有波 → 涨潮（TideWave.cs）
             if (st.status != "play") { var s = st.status; QueueFx(() => EndFx(s)); }
             MechSync();
@@ -756,7 +762,7 @@ namespace Tide
             gate.stage = "wait-dash " + u.dash.Count(x => !x.IsCompleted) + "/" + u.dash.Count + " riders=" + u.riders.Count + " boatState=" + u.state;
             await Task.WhenAll(u.dash.ToArray()); if (t != tok) return;
             gate.stage = "leaving";
-            u.state = "leave"; sfx.Play("sail"); Haptics.Play(Haptics.Kind.Medium); StormBonus();
+            u.state = "leave"; sfx.Play("sail"); Haptics.Play(Haptics.Kind.Medium);
             chain = Fx.Now - lastDepart < 4000 ? chain + 1 : 1; lastDepart = Fx.Now; Praise(chain);
             TaskAdd("boat"); TaskAdd("chain", chain);
             foreach (var r in u.riders) { var rb = r.body; Fx.Run(() => Fx.Tween(400, p => rb.localPosition = new Vector3(0, Mathf.Sin(p * Mathf.PI) * 0.25f, 0))); }
@@ -844,6 +850,8 @@ namespace Tide
             if (homeOpen) HomeTick(dt); else PlaceCam(false);
             if (L != null)
             {
+                if (wreck) WreckTick(now);   // 海啸过后一片狼藉：东西都在水里漂（Surge.cs）
+                else {
                 foreach (var u in boatV)
                 {
                     if (u == null || !u.g) continue;
@@ -877,6 +885,8 @@ namespace Tide
                     tr.position = new Vector3(tr.position.x, 0.25f, tr.position.z);
                 }
                 HeadTick(); HouseTick(dt); SpecialTick(); LiveTick(now); BlinkTick(now);
+                }
+                if (!intro && st.status == "play") TideCheck();   // 10-30：输了以后解锁泊位复活时港湾正好是空的，没有点船就没人叫涨潮 → 卡住；每帧看一眼兜底
                 // 发呆 6 秒：最该点的那艘船跳一下
                 if (st.status == "play" && !demo && !intro && !ModalOpen && !OnScreen && !GuideOn) { idleT += dt; if (idleT > 6 && hintB < 0) { idleT = 3; Nudge(); } }
                 else idleT = 0;

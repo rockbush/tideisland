@@ -108,6 +108,43 @@ namespace Tide
         }
 
         // 家园：通关拿星 → 进岛 → 建一样（拍中间几帧）→ 建完一个区领奖 → 四个区全建好的样子 → 宝箱、图鉴 → 开始界面红点 → 连胜开局送道具
+        // -tideSurge：风暴海浪按倒计时漫上海滩 → 倒计时走完超级海啸 → 复活海退回去
+        async Task SurgeShots(string dir)
+        {
+            save.seen.AddRange(new[] { "yacht", "raft", "carrier", "rock", "house", "mys", "storm", "weed", "lock", "shark", "tide" });
+            PlayLevel(int.Parse(AutoTest.Arg("-tideSurge") ?? "41")); await Fx.SleepKeep(1500);
+            var fb = Rules.InLot(L, st).FirstOrDefault(x => Rules.PathOf(L, st, x).free);
+            TapAt(cam.WorldToScreenPoint(boatV[fb].g.transform.position + Vector3.up * 0.3f)); await Fx.SleepKeep(300);
+            var c4 = new Vector3[4]; ui.top.GetWorldCorners(c4);
+            TLog("屏高=" + Screen.height + " 顶栏底=" + c4[0].y.ToString("0") + " 岸线0 y=" + cam.WorldToScreenPoint(new Vector3(0, SEA_Y, SurgeZ0)).y.ToString("0") + " 岸线1 y=" + cam.WorldToScreenPoint(new Vector3(0, SEA_Y, SurgeZ1)).y.ToString("0") + " 风暴=" + stormOn);
+            foreach (float s in new[] { 30f, 20f, 10f, 3f })
+            {
+                stormLeft = s; await Fx.SleepKeep(2400); stormLeft = s; await Shot(dir, "u_" + s.ToString("00"));
+            }
+            stormLeft = 0.2f;
+            for (int i = 0; i < 40; i++) { await Fx.SleepKeep(125); ScreenCapture.CaptureScreenshot(Path.Combine(dir, "u_ts_" + i.ToString("00") + ".png")); }
+            await Fx.SleepKeep(1500); await Shot(dir, "u_lose");
+            TLog("海啸后 状态=" + st.status + " 弹窗=" + ModalOpen);
+            save.coins = 500; Revive(true); await Fx.SleepKeep(2500); await Shot(dir, "u_revive");
+            TLog("复活 剩 " + stormLeft.ToString("0") + " 秒 岸线=" + surgeEdge.ToString("0.0") + " (z0=" + SurgeZ0.ToString("0.0") + ")");
+        }
+
+        // -tideDev：地图上点没解锁的关 → 密码框 → 输 yyd → 全开（测完把 dev 关回去）
+        async Task DevShots(string dir)
+        {
+            bool was = save.dev; int top0 = save.top; save.dev = false; save.top = 2;
+            HideTitle(); ShowMap(false); await Fx.SleepKeep(900);
+            int lk = Mathf.Min(save.top + 3, LEVELS.Length - 1);
+            var node = ui.map.GetComponentsInChildren<RectTransform>(true).First(r => r.name == "lv" + (lk + 1));
+            node.GetComponent<UnityEngine.UI.Button>().onClick.Invoke(); await Fx.SleepKeep(600); await Shot(dir, "d_pass");
+            var input = ui.box.GetComponentInChildren<UnityEngine.UI.InputField>();
+            input.text = "abc"; boxContent.GetComponentsInChildren<UnityEngine.UI.Button>().Last().onClick.Invoke(); await Fx.SleepKeep(500); await Shot(dir, "d_wrong");
+            TLog("错密码 dev=" + save.dev);
+            input.text = "YYD"; boxContent.GetComponentsInChildren<UnityEngine.UI.Button>().Last().onClick.Invoke(); await Fx.SleepKeep(900); await Shot(dir, "d_open");
+            TLog("对密码 dev=" + save.dev + " top=" + save.top + " 弹窗=" + ui.modal.gameObject.activeSelf);
+            save.dev = was; save.top = top0; save.Persist();
+        }
+
         async Task HomeShots(string dir)
         {
             save = save.Reset(); save.homeVer = 1; save.seen.AddRange(new[] { "yacht", "raft", "carrier", "rock", "house", "mys", "storm", "weed", "lock", "shark" }); save.Persist();
@@ -387,6 +424,19 @@ namespace Tide
         }
 
         // 连击 + 特殊船原型（-tideCombo 4,8,12）：机器人按最佳步快点，记连击/特殊船/集合，变出特殊船和连击时截图
+        // 10-30 卡死复现：分波关里港湾刚清空、还有下一波、正好输了 → 解锁泊位复活，应该接着涨潮
+        async Task StuckTest(string dir)
+        {
+            HideTitle(); SetHud(true); PlayLevel(29); await Fx.SleepKeep(1500); save.coins = 9999;
+            foreach (int b in Rules.InLot(L, st)) { foreach (int j in L.boats[b].cells) st.occ[j] = -1; st.inl[b] = 0; if (boatV[b] != null) boatV[b].g.SetActive(false); }
+            for (int h = 0; h < L.houses.Count; h++) st.hq[h] = L.houses[h].list.Count;
+            st.status = "lose"; var lose = st.status; QueueFx(() => EndFx(lose));
+            TLog("造出卡死局面：港湾空 " + (Rules.InLot(L, st).Count == 0) + "，还有 " + (L.waves.Count - L.wave) + " 波，状态 " + st.status);
+            await Fx.SleepKeep(1500); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "stuck_0.png"));
+            Revive(true); await Fx.SleepKeep(4000); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "stuck_1.png"));
+            TLog("复活 4 秒后：涨潮次数 " + tideN + "，港湾里 " + Rules.InLot(L, st).Count + " 艘船，能走 " + Rules.InLot(L, st).Count(b => Rules.CanGo(L, st, b)) + "，状态 " + st.status + "，intro=" + intro);
+        }
+
         async Task ComboTest(string dir)
         {
             HideTitle(); SetHud(true);
@@ -396,20 +446,20 @@ namespace Tide
             var rng = new Rng(7);
             foreach (int lv in (AutoTest.Arg("-tideCombo") ?? "4,8,12").Split(',').Select(int.Parse))
             {
-                float ld0 = Time.realtimeSinceStartup; PlayLevel(lv); float ld = Time.realtimeSinceStartup - ld0; TLog("关" + (lv + 1) + " 分波 " + (L.waves == null ? 0 : L.waves.Count + 1) + " 波，网格缩放 " + lay.gs.ToString("0.00") + "，读关 " + (ld * 1000).ToString("0") + "ms，船 " + L.boats.Count + " 人 " + L.total + "，礁石 " + L.ins.Count(v => v == 2) + " 船坞 " + L.houses.Count + " 鲨鱼 " + L.sharks.Count); await Fx.SleepKeep(1100); save.coins = 9999;
+                float ld0 = Time.realtimeSinceStartup; PlayLevel(lv); float ld = Time.realtimeSinceStartup - ld0; TLog("关" + (lv + 1) + " 分波 " + (L.waves == null ? 0 : L.waves.Count + 1) + " 波，网格缩放 " + lay.gs.ToString("0.00") + "，读关 " + (ld * 1000).ToString("0") + "ms，船 " + L.boats.Count + " 人 " + L.total + "，礁石 " + L.ins.Count(v => v == 2) + " 船坞 " + L.houses.Count + " 鲨鱼 " + L.sharks.Count + " 功能人 " + (L.qx == null ? "无" : string.Join(",", Enumerable.Range(0, L.qx.Count).Where(i => L.qx[i] != 0).Select(i => "#" + i + "色" + L.queue[i] + "(左" + (i > 0 ? L.queue[i - 1] : -1) + "右" + (i + 1 < L.queue.Count ? L.queue[i + 1] : -1) + ")")))); await Fx.SleepKeep(1100); save.coins = 9999;
                 float t0 = Time.realtimeSinceStartup; int sp0 = 0, ch0 = 0, rainbowRide = 0, lvMax = 0, fvLast = 0, v0 = 0, vShots = 0; vaultN = 0; bool spgShot = false; int td0 = 0;
                 while (Time.realtimeSinceStartup - t0 < (pace > 600 ? 240 : 100))
                 {
                     if (ModalOpen)
                     {
                         if (st.status == "win") { wins++; break; }
-                        if (st.status == "lose") { loses++; if (st.berth.Count >= MAXB) break; Revive(true); await Fx.SleepKeep(300); continue; }
+                        if (st.status == "lose") { loses++; if (st.berth.Count >= MAXB) break; if (L.waves != null && L.wave < L.waves.Count && Rules.InLot(L, st).Count == 0) TLog("关" + (lv + 1) + " 输的时候港湾空着、还有下一波 → 复活后应该接着涨潮"); Revive(true); await Fx.SleepKeep(300); continue; }
                         HideModal();
                     }
                     if (spMade != sp0) { sp0 = spMade; totalSp++; TLog("关" + (lv + 1) + " 连击×" + run + "人 → 特殊船 #" + spMade); if (shots < 12) { await Fx.SleepKeep(150); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "sp_" + (shots++).ToString("00") + ".png")); } }
                     { var sg = qGuys.FirstOrDefault(g => g.x != 0 && !g.vault && g.s <= SlotS(g.slot) + 0.01f); if (sg != null && !spgShot) { spgShot = true; await Fx.SleepKeep(600); var sp = cam.WorldToScreenPoint(sg.g.transform.position); TLog("功能人在屏幕 " + sp.ToString("F0") + " 排第 " + sg.slot); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "spg_" + (lv + 1) + ".png")); await Fx.SleepKeep(500); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "spg_" + (lv + 1) + "b.png")); } }   // 功能人的长相
                     if (vaultN != v0) { v0 = vaultN; TLog("关" + (lv + 1) + " 撑杆跳 #" + vaultN); if (vShots++ < 2) for (int i = 0; i < 9; i++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "v" + vShots + "_" + i + ".png")); await Fx.SleepKeep(110); } }   // 撑杆跳（Pole.cs）：连拍
-                    if (tideN != td0) { td0 = tideN; TLog("关" + (lv + 1) + " 涨潮 → 第 " + (L.wave + 1) + " 波，船 " + Rules.InLot(L, st).Count + " 艘，队伍 " + st.qi + "/" + st.q.Count); if (td0 <= 2) for (int i = 0; i < 20; i++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "tide" + (lv + 1) + "_" + td0 + "_" + i + ".png")); await Fx.SleepKeep(130); } }   // 涨潮（TideWave.cs）：连拍
+                    if (tideN != td0) { td0 = tideN; TLog("关" + (lv + 1) + " 涨潮 → 第 " + (L.wave + 1) + " 波（" + (Enumerable.Range(0, L.waveOff).Any(b => st.inl[b] != 0) ? "队头颜色没船了，提前" : "港湾清空") + "），港湾里 " + Rules.InLot(L, st).Count + " 艘（上一波剩 " + Enumerable.Range(0, L.waveOff).Count(b => st.inl[b] != 0) + "），海上等 " + st.wait.Count + " 艘，队伍 " + st.qi + "/" + st.q.Count); if (td0 <= 2) for (int i = 0; i < 20; i++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "tide" + (lv + 1) + "_" + td0 + "_" + i + ".png")); await Fx.SleepKeep(130); } }   // 涨潮（TideWave.cs）：连拍
                     lvMax = Mathf.Max(lvMax, run);
                     if (FeverTier != fvLast) { if (FeverTier > fvLast) TLog("关" + (lv + 1) + " 热潮升到 " + FeverTier + " 档（连击 " + run + " 人，上船时长 ×" + BoardSpeed + "）"); fvLast = FeverTier; if (fvLast >= 2 && fvShots < 6) { await Fx.SleepKeep(700); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "fv" + fvLast + "_" + (fvShots++) + ".png")); } }
                     if (run / 10 != ch0) { ch0 = run / 10; maxChain = Mathf.Max(maxChain, run); if (run >= 10 && shots < 12) { await Fx.SleepKeep(200); ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "c_" + (shots++).ToString("00") + ".png")); } }
@@ -418,7 +468,7 @@ namespace Tide
                     await Fx.SleepKeep(pace);
                 }
                 { var lot = Rules.InLot(L, st); TLog("  诊断 qi=" + st.qi + "/" + st.q.Count + " vq=" + vq + " pipeN=" + pipeN + " 泊位=[" + string.Join(",", st.berth.Select(b => b < 0 ? "空" : b + "(c" + L.boats[b].c + " sp" + L.boats[b].sp + " " + st.load[b] + "/" + L.boats[b].cap + " " + (boatV[b] != null ? boatV[b].state : "null") + ")")) + "] 港湾" + lot.Count + " 能走" + lot.Count(b => Rules.CanGo(L, st, b)) + " best=" + Rules.BestMove(L, st, null, 0) + " 队头色=" + (st.qi < st.q.Count ? st.q[st.qi] : -1)); }
-                TLog("关" + (lv + 1) + " 沿通道兜底 " + aRuns + " 次，最远 " + aMax.ToString("0.0") + "m"); aRuns = 0; aMax = 0;
+                TLog("关" + (lv + 1) + " 海上等的船进港 " + tideInN + " 艘，最后还在海上 " + st.wait.Count); tideInN = 0; TLog("关" + (lv + 1) + " 风暴剩 " + stormLeft.ToString("0.0") + " 秒（上限 " + stormCap + "）"); TLog("关" + (lv + 1) + " 沿通道兜底 " + aRuns + " 次，最远 " + aMax.ToString("0.0") + "m"); aRuns = 0; aMax = 0;
                 TLog("关" + (lv + 1) + " 状态=" + st.status + " 最长连击=" + lvMax + "人 特殊船=" + spMade + " 彩虹船最多坐了" + rainbowRide + " 用时" + (Time.realtimeSinceStartup - t0).ToString("0") + "s");
             }
             TLog("总计 过关 " + wins + " 输(复活) " + loses + " 最高连击 " + maxChain + " 特殊船 " + totalSp);
@@ -460,9 +510,12 @@ namespace Tide
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideBalance") >= 0) { await Fx.SleepKeep(800); await BalanceShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideGuide") >= 0) { await Fx.SleepKeep(800); await GuideShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideDaily") >= 0) { await Fx.SleepKeep(800); await DailyShots(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideSurge") >= 0) { await Fx.SleepKeep(800); await SurgeShots(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideDev") >= 0) { await Fx.SleepKeep(800); await DevShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHome") >= 0) { await Fx.SleepKeep(800); await HomeShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideMech") >= 0) { HideTitle(); SetHud(true); await MechShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideCombo") >= 0) { await ComboTest(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideStuck") >= 0) { await StuckTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideLock") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await LockShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHeli") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await HeliShots(dir); return; }
             TLog("音效放大后最响的峰值 " + Synth.sfxPeakMax.ToString("0.00"));

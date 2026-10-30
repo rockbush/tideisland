@@ -158,6 +158,32 @@ namespace Tide
         }
         void HideTitle() { ui.title.gameObject.SetActive(false); titlePlay = null; titleBoat = null; titleDot = null; signDot = taskDot = null; }
 
+        // 开发用隐藏开关：地图上点没解锁的关 → 输密码 → 全部关卡可选（不动存档进度）。正式包发布前去掉！
+        const string DEV_PASS = "yyd";
+        void DevPassword()
+        {
+            Modal();
+            MText(T("输入密码"), 24, UIKit.Brown);
+            var box = UIKit.Panel(boxContent, "pass", Color.white, 4, 2);
+            box.gameObject.AddComponent<LayoutElement>().preferredHeight = 50;
+            var input = box.gameObject.AddComponent<InputField>();
+            var fill = box.Find("fill").GetComponent<Image>(); fill.raycastTarget = true; input.targetGraphic = fill;
+            var hint = UIKit.Txt(box, "hint", T("密码"), 20, UIKit.Hex("a8a8a8")); hint.rectTransform.Stretch(12, 0, 12, 0);
+            var txt = UIKit.Txt(box, "text", "", 22, UIKit.Ink); txt.rectTransform.Stretch(12, 0, 12, 0); txt.supportRichText = false;
+            input.textComponent = txt; input.placeholder = hint; input.characterLimit = 16;
+            input.contentType = InputField.ContentType.Alphanumeric;
+            input.ActivateInputField();
+            void Check()
+            {
+                if (input.text.Trim().ToLower() != DEV_PASS) { sfx.Play("click"); Toast(T("密码错误")); return; }
+                save.dev = true; save.Persist(); HideModal(); ShowMap(mapFromTitle); Toast(T("测试：全部关卡已解锁"));
+            }
+            input.onEndEdit.AddListener(_ => { if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) Check(); });
+            MSpace(4);
+            MButton(T("确定"), "3fb950", Check);
+            FinishModal();
+        }
+
         void PlayLevel(int i)
         {
             if (i != levelIdx) QuitTrack("map");
@@ -268,7 +294,7 @@ namespace Tide
             bool skin = Skin.Has("node_green");
             for (int i = 0; i < N; i++)
             {
-                bool done = i < save.top, isCur = i == cur, locked = i > save.top;
+                bool done = i < save.top, isCur = i == cur, locked = i > save.top && !save.dev;
                 float sz = isCur ? 96 : 80;
                 RectTransform n; Text t = null;
                 if (skin)
@@ -303,11 +329,12 @@ namespace Tide
                 }
                 int ii = i;
                 if (!locked) UIKit.Btn(n, () => { sfx.Play("click"); PlayLevel(ii); });
+                else UIKit.Btn(n, () => { sfx.Play("click"); DevPassword(); });
             }
             // 没解锁的岛盖一层暗色
             for (int k = 1; k < nIsle; k++)
             {
-                int first = k * PER_ISLE; if (first <= save.top) continue;
+                int first = k * PER_ISLE; if (first <= save.top || save.dev) continue;
                 float y0 = PAD + k * ISLE_H;
                 var lk = UIKit.Img(content, "lock" + k, null, UIKit.Hex("1d2c3c", 0.38f));
                 lk.rectTransform.anchorMin = new Vector2(0, 0); lk.rectTransform.anchorMax = new Vector2(1, 0); lk.rectTransform.pivot = new Vector2(0.5f, 0);
@@ -326,13 +353,6 @@ namespace Tide
             if (Skin.Has("star_gold")) Skin.Img(starI, "star_gold").rectTransform.Stretch();
             UIKit.Txt(ht, "s", save.star.ToString(), 20, UIKit.Hex("6b3d14"), TextAnchor.MiddleLeft).rectTransform.Place(new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-12, 0), new Vector2(48, 30));
             IconBtn(head, "icon_back", new Vector2(0, 0.5f), new Vector2(26, 0), 58, () => { sfx.Play("click"); MapBack(); }, "<");
-            // 测试用：3 秒内连点标题 5 下，全部解锁
-            UIKit.Btn(ht, () =>
-            {
-                if (Time.realtimeSinceStartup - devT > 3) devTaps = 0;
-                devT = Time.realtimeSinceStartup;
-                if (++devTaps >= 5 && save.top < N - 1) { save.top = N - 1; save.Persist(); ShowMap(mapFromTitle); Toast(T("测试：全部关卡已解锁")); }
-            });
             // 滚到当前关
             Canvas.ForceUpdateCanvases();
             float vh = view.rect.height, focus = NodePos(cur >= 0 ? cur : N - 1).y;
@@ -412,6 +432,15 @@ namespace Tide
                 save.lang = En ? "zh" : "en"; save.Persist();
                 Analytics.Track("setting", "key", "lang", "value", save.lang);
                 Relocalize(); ShowSettings();
+            }, true, "ffffff", 17, 48);
+            // 开发用：风暴倒计时开局 / 复活秒数，点一下换一档（正式包发布前去掉）
+            MButton(T("风暴倒计时") + sep + save.stormStart + T("秒"), "8a5cff", () =>
+            {
+                int[] opts = { 20, 30, 40, 50, 60, 75, 90 };
+                int i = System.Array.IndexOf(opts, save.stormStart);
+                save.stormStart = opts[(i + 1) % opts.Length]; save.Persist(); sfx.Play("click");
+                if (st != null && stormOn && st.taps == 0 && st.status == "play") { stormMax = stormLeft = STORM_START; UpdateStormBar(); }   // 还没点第一下：当前关马上用新秒数
+                ShowSettings(false);
             }, true, "ffffff", 17, 48);
             MSpace(4);
             bool armed = false; Button rb = null;

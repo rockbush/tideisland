@@ -26,6 +26,10 @@ namespace Tide
         // 解锁到第几关（下标；= 关卡总数 表示全通了）、每关打了几次
         public int top = -1;
         public List<int> tries = new List<int>();
+        // 开发用：地图上输密码打开的"全部关卡可选"，不改 top（正式包发布前去掉）
+        public bool dev;
+        // 开发用：风暴倒计时开局 / 复活回到几秒（设置里调，正式包发布前定死数值、去掉这个选项）
+        public int stormStart = 30;
         // 设置
         public bool music = true, sfx = true, vibe = true;
         public string lang = "";            // "" = 跟系统，"en"，"zh"
@@ -51,7 +55,7 @@ namespace Tide
         }
 
         // 清空进度：设置和留存统计留着
-        public SaveData Reset() => new SaveData { top = 0, music = music, sfx = sfx, vibe = vibe, lang = lang, installDay = installDay, sessions = sessions };
+        public SaveData Reset() => new SaveData { top = 0, music = music, sfx = sfx, vibe = vibe, lang = lang, stormStart = stormStart, installDay = installDay, sessions = sessions };
 
         public static long Today => DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 86400;
         // 每日签到、任务、家园每日礼物用的"第几天"：按手机本地时间零点换天（DayShift 只给自动测试模拟过了几天）
