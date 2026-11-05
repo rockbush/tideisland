@@ -848,7 +848,8 @@ namespace Tide
             }
             shake *= 0.9f;
             if (homeOpen) HomeTick(dt); else PlaceCam(false);
-            if (L != null)
+            if (specOpen) SpecTick(dt);
+            else if (L != null)
             {
                 if (wreck) WreckTick(now);   // 海啸过后一片狼藉：东西都在水里漂（Surge.cs）
                 else {
@@ -946,6 +947,8 @@ namespace Tide
         // ---------- 输入 ----------
         void HandleInput()
         {
+            if (specOpen) { SpecInput(); return; }
+            if (SpecList) return;
             if (AutoTest.Wanted) return;   // 自动测试只走代码里的 TapAt，不接真鼠标
             Vector2 pos; int id = -1;
             if (Input.touchCount > 0) { var tch = Input.GetTouch(0); if (tch.phase != TouchPhase.Began) return; pos = tch.position; id = tch.fingerId; }

@@ -125,7 +125,7 @@ namespace Tide
             { "清空进度", "Reset progress" }, { "再点一次确认清空", "Tap again to confirm" },
             { "版本 {0}", "Version {0}" },
             // ---- 风暴 / 难度 / 生存主题 ----
-            { "风暴", "Storm" }, { "秒", "s" }, { "风暴倒计时", "Storm timer" }, { "风暴快到了！", "The storm is almost here!" },
+            { "风暴", "Storm" }, { "秒", "s" }, { "风暴倒计时", "Storm timer" }, { "特殊模式", "Special Mode" }, { "风暴快到了！", "The storm is almost here!" },
             { "风暴推迟 {0} 秒", "Storm delayed {0}s" }, { "风暴来了！", "The storm hit!" },
             { "还有 {0} 人没救出来", "{0} islanders left behind" }, { "风暴来之前没能把大家都送走", "Not everyone got off the island in time" },
             { "复活：风暴推迟 {0} 秒", "Continue: delay the storm {0}s" }, { "复活：风暴倒计时回到 {0} 秒", "Continue: storm timer back to {0}s" },

@@ -158,6 +158,8 @@ namespace Tide
             titlePlay = SkinBtn(S, "3fb950", all ? T("全部通关！") : F("第 {0} 关", CurLevel + 1), 34, go, out var pl);
             titlePlay.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), new Vector2(0, 156), new Vector2(236, 76));
             pl.rectTransform.offsetMin = new Vector2(14, 8);
+            // 10-30 新地形试玩入口（SpecMode.cs）
+            SkinBtn(S, "14608f", T("特殊模式"), 22, () => { sfx.Play("click"); ShowSpecList(); }, out _).Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), new Vector2(0, 236), new Vector2(180, 54));
 
             // 底部导航栏：地图 | 开始（选中、凸起） | 小岛
             var nav = UIKit.Rect("nav", R).Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(0, 0));

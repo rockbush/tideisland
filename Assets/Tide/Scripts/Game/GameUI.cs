@@ -44,7 +44,7 @@ namespace Tide
         class UIRefs
         {
             public Canvas canvas; public CanvasScaler scaler; public float scale = 1;
-            public RectTransform bannerBox, praiseBox, fx, safe, hud, labels, top, queue, tutBox, boost, menu, modal, box, toasts, ad, hand, coinPill, gift, qbar, title, map, home;
+            public RectTransform bannerBox, praiseBox, fx, safe, hud, labels, top, queue, tutBox, boost, menu, modal, box, toasts, ad, hand, coinPill, gift, qbar, title, map, home, spec;
             public Text lvName, coins, qlbl, tut, banner, praise, adN, handT;
             public Image qfill, vig, handRing, bannerBg, bannerImg, praiseImg;
             public RectTransform[] bb = new RectTransform[3]; public Text[] cnt = new Text[3]; public Image[] cntBg = new Image[3], cntIc = new Image[3];
@@ -209,6 +209,7 @@ namespace Tide
             ui.title = UIKit.Rect("title", root).Stretch(); ui.title.gameObject.SetActive(false);
             ui.map = UIKit.Rect("map", root).Stretch(); ui.map.gameObject.SetActive(false);
             ui.home = UIKit.Rect("home", root).Stretch(); ui.home.gameObject.SetActive(false);   // 家园（Home.cs）
+            ui.spec = UIKit.Rect("spec", root).Stretch(); ui.spec.gameObject.SetActive(false);   // 特殊模式（SpecMode.cs）
 
             // ---- 提示字 ----
             var tsafe = SafeRect(root, "toastSafe");

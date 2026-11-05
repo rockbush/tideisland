@@ -27,7 +27,7 @@ namespace Tide
         static int MapArt(int k) => Skin.Has("map" + (k + 1)) ? k : k % 5;
         const int PER_ISLE = 10;
 
-        bool OnScreen => ui.title && (ui.title.gameObject.activeSelf || ui.map.gameObject.activeSelf || (ui.home && ui.home.gameObject.activeSelf));
+        bool OnScreen => ui.title && (ui.title.gameObject.activeSelf || ui.map.gameObject.activeSelf || (ui.home && ui.home.gameObject.activeSelf) || (ui.spec && ui.spec.gameObject.activeSelf));
         bool mapFromTitle;
         float levelT0;
         int LevelSec => Mathf.RoundToInt(Time.realtimeSinceStartup - levelT0);
@@ -480,6 +480,7 @@ namespace Tide
             if (menuOpen) { CloseMenu(); return; }
             if (ModalOpen) { if (modalClosable) HideModal(); return; }
             if (homeOpen) { HomeBack(); return; }
+            if (ui.spec.gameObject.activeSelf) { SpecBack(); return; }
             if (ui.map.gameObject.activeSelf) { MapBack(); return; }
             if (ui.title.gameObject.activeSelf)
             {

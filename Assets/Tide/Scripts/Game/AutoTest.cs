@@ -130,6 +130,46 @@ namespace Tide
         }
 
         // -tideDev：地图上点没解锁的关 → 密码框 → 输 yyd → 全开（测完把 dev 关回去）
+        // 特殊模式：13 种地形。先不开画面让机器人各打 20 张图，再逐个进地形截图、点船、打通
+        async Task SpecShots(string dir)
+        {
+            string only = AutoTest.Arg("-tideSpec"); int N = SpSim.NAMES.Length;
+            System.Func<int, bool> want = k => only == null || only.StartsWith("-") || System.Array.IndexOf(only.Split(','), k.ToString()) >= 0;
+            for (int k = 0; k < N; k++)
+            {
+                if (!want(k)) continue;
+                int win = 0, fail = 0; float tt = 0, tl = 0; var o = new float[2];
+                for (int s = 0; s < 20; s++) { if (SpSim.Build((SpKind)k, 100 + s) == null) { fail++; continue; } if (SpSim.Verify((SpKind)k, 100 + s, o)) { win++; tt += o[0]; tl += o[1]; } }
+                TLog("验证 " + SpSim.NAMES[k] + "：20 张里解开 " + win + "，生成失败 " + fail + "，平均用时 " + (tt / Mathf.Max(1, win)).ToString("0") + " 秒，风暴还剩 " + (tl / Mathf.Max(1, win)).ToString("0"));
+                await Fx.SleepKeep(10);
+            }
+            if (only == null || only.StartsWith("-")) { await Shot(dir, "title_0"); ShowSpecList(); await Fx.SleepKeep(300); await Shot(dir, "list_1"); }
+            else ShowSpecList();
+            for (int k = 0; k < N; k++)
+            {
+                if (!want(k)) continue;
+                SpecPlay((SpKind)k, 7 + k, false); await Fx.SleepKeep(500);
+                await Shot(dir, "k" + k + "_a_1");
+                SpBoat fb = null; foreach (var b in sp.boats) if (b.st == SpSim.LOT && sp.Probe(b).res == SpSim.OK) { fb = b; break; }
+                if (sp.steps.Count > 0) fb = sp.boats[sp.steps[0].tap];
+                if (sp.kind == SpKind.Paint || sp.kind == SpKind.Truck) fb = null;   // 这两关乱点第一下机器人救不回来，只看机器人打
+                if (fb != null) { SpecPreview(fb); await Fx.SleepKeep(120); await Shot(dir, "k" + k + "_p_2"); SpecPreview(null); var sc = cam.WorldToScreenPoint(new Vector3(fb.p.x, 0.25f, -fb.p.y)); SpecTapAt(sc); TLog(SpSim.NAMES[k] + " 真点一艘：状态 " + fb.st); }
+                spBot = true; spSteps = 3; float t0 = Fx.Now; bool mid = false;
+                while (sp.status != 1 && sp.status != 2 && Fx.Now - t0 < 70000)
+                {
+                    await Fx.SleepKeep(100);
+                    if (!mid && Fx.Now - t0 > 1500) { mid = true; await Shot(dir, "k" + k + "_b_3"); }
+                }
+                TLog(SpSim.NAMES[k] + " 结果 status=" + sp.status + " " + sp.why + " 用时 " + sp.t.ToString("0") + " 风暴 " + sp.timer.ToString("0") + " 剩 " + sp.PeopleLeft());
+                await Shot(dir, "k" + k + "_c_4");
+                spBot = false; spSteps = 1; await Fx.SleepKeep(100);
+                if (k == 1) { SpecRule(); await Fx.SleepKeep(450); await Shot(dir, "m_rule_1"); HideModal(); SpecEnd(sp.status == 1); await Fx.SleepKeep(450); await Shot(dir, "m_end_2"); HideModal(); }
+            }
+            specOpen = true; SpecBack(); await Fx.SleepKeep(100); SpecBack(); await Fx.SleepKeep(200);
+            TLog("退出后 specOpen=" + specOpen + " world=" + world.gameObject.activeSelf + " 标题=" + ui.title.gameObject.activeSelf);
+            await Shot(dir, "title_9");
+        }
+
         async Task DevShots(string dir)
         {
             bool was = save.dev; int top0 = save.top; save.dev = false; save.top = 2;
@@ -512,6 +552,8 @@ namespace Tide
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideDaily") >= 0) { await Fx.SleepKeep(800); await DailyShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideSurge") >= 0) { await Fx.SleepKeep(800); await SurgeShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideDev") >= 0) { await Fx.SleepKeep(800); await DevShots(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideSpec") >= 0) { await Fx.SleepKeep(800); await SpecShots(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideMix") >= 0) { await Fx.SleepKeep(800); await MixShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHome") >= 0) { await Fx.SleepKeep(800); await HomeShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideMech") >= 0) { HideTitle(); SetHud(true); await MechShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideCombo") >= 0) { await ComboTest(dir); return; }
