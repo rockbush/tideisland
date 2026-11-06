@@ -180,8 +180,8 @@ namespace Tide
             st = Rules.NewState(L);
             boosterUse[0] = boosterUse[1] = 0;
             vq = 0; boardQ = 0; usedRevive = usedBooster = false; craneMode = false; hintB = -1; combo = 0; chain = 0; spMade = 0; rainbowWait = 0; run = 0; runT = runBigT = -9999; warned1 = false; idleT = 0;
-            for (int k = 0; k < MAXB; k++) gates[k] = new Gate { };
-            for (int k = 0; k < MAXB; k++) gates[k].tcs.TrySetResult(true);
+            for (int k = 0; k < gates.Length; k++) gates[k] = new Gate { };
+            for (int k = 0; k < gates.Length; k++) gates[k].tcs.TrySetResult(true);
             ClearLabels();
             HideHand();
             LayoutLevel();
@@ -198,6 +198,8 @@ namespace Tide
             }
             HouseCount();
             StormReset();
+            BountyReset();   // 悬赏订单（Bounty.cs，开发开关）
+            PirReset();      // 海盗（Pirate.cs，开发开关）
             var cards = new List<string>();
             if (L.cfg.storm > 0) cards.Add("storm");
             if (L.boats.Any(B => B.len == 3)) cards.Add("yacht");
@@ -506,6 +508,7 @@ namespace Tide
             else if (r == "full") { sfx.Play("bad"); Haptics.Play(Haptics.Kind.Heavy); Toast(T("码头停满了")); ShakeBoat(b, Vector3.right); }
             else if (r == "ok") { sfx.Play("go"); Haptics.Play(Haptics.Kind.Light); }
             else if (r == "weed" || r == "locked") MechRefuse(b, r);
+            else if (r == "stone") StoneRefuse(b);   // 海盗石化的船（Pirate.cs）
             else if (r == "shark") { sfx.Play("bad"); if (tipShark++ < 2) Toast(T("鲨鱼挡在出口！等它游过去再开")); }
             RunEvents(ev);
         }
@@ -532,6 +535,7 @@ namespace Tide
             foreach (var e in ev)
             {
                 var E = e;
+                BountyEv(e); PirEv(e);
                 if (e.t == "go") { var gate = gates[e.k].p; BLog("派船 船" + E.b + " → 泊位" + E.k + (E.how == "crane" ? "（直升机）" : "") + " 门" + (gate.IsCompleted ? "开" : "关(等船" + gates[E.k].owner + ")")); Fx.Run(() => SailFx(E.b, E.k, E.how, gate)); }
                 else if (e.t == "spawn") Fx.Run(() => SpawnFx(E.b, E.h));
                 else if (e.t == "reveal") Fx.Run(() => RevealFx(E.b));
@@ -894,6 +898,8 @@ namespace Tide
                 ui.vig.color = new Color(0.63f, 0.12f, 0.08f, sfx.tensT > 0 ? (0.35f + 0.25f * Mathf.Sin(now / 260)) * 0.55f : 0);
                 StormTick(dt);
                 FeverTick(dt);
+                BountyTick(dt);
+                PirTick(dt);
                 MechTick(dt);
             }
             HandleInput();
@@ -1127,7 +1133,8 @@ namespace Tide
         {
             int have = id == "crane" ? save.crane : save.sort;
             void Tr(string pay) { Analytics.Track("booster", "lv", levelIdx + 1, "id", id, "pay", pay); TaskAdd("boost"); }
-            boosterUse[id == "crane" ? 0 : 1]++;      // 每关上限：不管怎么来的都算一次
+            boosterUse[id == "crane" ? 0 : 1]++;
+            BountyBoost();      // 每关上限：不管怎么来的都算一次
             if (id == "crane" ? gCrane > 0 : gSort > 0) { if (id == "crane") gCrane--; else gSort--; Tr("streak"); fn(); UpdateHUD(); }   // 连胜送的先用
             else if (have > 0) { if (id == "crane") save.crane--; else save.sort--; save.Persist(); Tr("free"); fn(); UpdateHUD(); }
             else if (save.coins >= COST[id]) { save.coins -= COST[id]; save.Persist(); Tr("coin"); fn(); UpdateHUD(); }

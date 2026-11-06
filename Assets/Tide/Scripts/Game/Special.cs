@@ -176,7 +176,7 @@ namespace Tide
         {
             if (st.status != "play") return;
             if (spMade % 2 == 1) { spMade++; rainbowWait++; RainbowTip(); TrySendRainbow(); return; }
-            var all = Rules.InLot(L, st).Where(b => L.boats[b].sp == 0 && (L.boats[b].mys == 0 || st.seen[b] != 0) && boatV[b] != null && boatV[b].state == "lot").ToList();
+            var all = Rules.InLot(L, st).Where(b => L.boats[b].sp == 0 && !Rules.Stone(st, b) && (L.boats[b].mys == 0 || st.seen[b] != 0) && boatV[b] != null && boatV[b].state == "lot").ToList();
             if (all.Count == 0) return;
             var free = all.Where(b => Rules.CanGo(L, st, b)).ToList();
             var pick = free.Count > 0 && UnityEngine.Random.value < 0.6f ? free : all;

@@ -514,6 +514,85 @@ namespace Tide
             TLog("总计 过关 " + wins + " 输(复活) " + loses + " 最高连击 " + maxChain + " 特殊船 " + totalSp);
         }
 
+        // 悬赏订单（-tideBounty 7,14,19,24）：打开开发开关，机器人六成时间照着悬赏点、其余按最佳步，每张悬赏出现 / 完成时截图
+        async Task BountyTest(string dir)
+        {
+            HideTitle(); SetHud(true);
+            save.devBounty = true; save.Persist();
+            ShowSettings(); await Fx.SleepKeep(500); await Shot(dir, "b_settings"); HideModal();
+            int pace = int.Parse(AutoTest.Arg("-tidePace") ?? "700"); var rng = new Rng(11); int shots = 0, allShown = 0, allDone = 0;
+            foreach (int lv in (AutoTest.Arg("-tideBounty") ?? "7,14,19,24").Split(',').Select(int.Parse))
+            {
+                PlayLevel(lv); await Fx.SleepKeep(1200); save.coins = 500;
+                float t0 = Time.realtimeSinceStartup; BountyT seen = null; int coins0 = save.coins; bool vipShot = false, doneShot = false;
+                while (Time.realtimeSinceStartup - t0 < 150)
+                {
+                    if (ModalOpen) { if (st.status == "win") break; if (st.status == "lose") { Revive(true); await Fx.SleepKeep(300); continue; } HideModal(); }
+                    if (bty != seen && bty != null)
+                    {
+                        seen = bty; doneShot = false;
+                        TLog("关" + (lv + 1) + " 悬赏 #" + bountyN + " " + bty.type + " 色" + bty.c + (bty.seq != null ? " 顺序" + string.Join(">", bty.seq) : "") + " 要" + bty.need + " 限时" + bty.dur.ToString("0.0") + "s 奖" + bty.coins);
+                        if (shots < 30) { await Fx.SleepKeep(450); await Shot(dir, "b" + (lv + 1) + "_" + bountyN + "_" + bty.type); shots++; }
+                    }
+                    if (bty != null && bty.type == "vip" && !vipShot) { var g = qGuys.FirstOrDefault(q => q.x == CROWN); if (g != null) { vipShot = true; await Fx.SleepKeep(300); TLog("贵宾在屏幕 " + cam.WorldToScreenPoint(g.g.transform.position).ToString("F0")); await Shot(dir, "b" + (lv + 1) + "_vip"); } }
+                    if (seen != null && seen.done && !doneShot) { doneShot = true; TLog("  → " + (seen.prog >= seen.need ? "完成" : "超时") + " 进度 " + seen.prog + "/" + seen.need); if (shots < 30 && seen.prog >= seen.need) { await Fx.SleepKeep(150); await Shot(dir, "b" + (lv + 1) + "_" + bountyN + "_done"); shots++; } }
+                    if (st.status == "play")
+                    {
+                        var frs = Rules.InLot(L, st).Where(x => Rules.CanGo(L, st, x) && boatV[x] != null && boatV[x].state == "lot").ToList();
+                        int b = -1;
+                        if (bty != null && !bty.done && rng.Next() < 0.6)
+                        {
+                            int want = bty.type == "seq" ? bty.seq[Mathf.Min(bty.prog, 2)] : bty.c;
+                            var m = frs.Where(x => L.boats[x].c == want).ToList(); if (want >= 0 && m.Count > 0) b = m[rng.Int(m.Count)];
+                        }
+                        if (b < 0) b = Rules.BestMove(L, st, null, 0);
+                        if (b >= 0 && boatV[b] != null && boatV[b].state == "lot") TapAt(cam.WorldToScreenPoint(boatV[b].g.transform.position + Vector3.up * 0.3f));
+                    }
+                    await Fx.SleepKeep(pace);
+                }
+                allShown += bountyN; allDone += bountyDone;
+                TLog("关" + (lv + 1) + " 状态=" + st.status + " 悬赏出了 " + bountyN + " 张，完成 " + bountyDone + "，金币 " + coins0 + "→" + save.coins + " 风暴剩 " + stormLeft.ToString("0.0"));
+            }
+            TLog("悬赏总计 出 " + allShown + " 完成 " + allDone);
+            save.devBounty = false; save.Persist();
+        }
+
+        // 海盗（-tidePirate 29,39 [-tidePirMode 1|2] [-tideSaveP 0.4]）：机器人一部分时间去救红圈船，其余按最佳步；红圈、开炮石化、点石船、解封都截图
+        async Task PirateTest(string dir)
+        {
+            HideTitle(); SetHud(true);
+            save.devPirate = int.Parse(AutoTest.Arg("-tidePirMode") ?? "1"); save.devBounty = AutoTest.Arg("-tidePirBounty") != null; save.Persist();
+            ShowSettings(); await Fx.SleepKeep(500); await Shot(dir, "p_settings"); HideModal();
+            int pace = int.Parse(AutoTest.Arg("-tidePace") ?? "700"); var rng = new Rng(5);
+            float saveP = float.Parse(AutoTest.Arg("-tideSaveP") ?? "0.4", System.Globalization.CultureInfo.InvariantCulture);
+            foreach (int lv in (AutoTest.Arg("-tidePirate") ?? "29,39").Split(',').Select(int.Parse))
+            {
+                PlayLevel(lv); await Fx.SleepKeep(1200); save.coins = 500;
+                float t0 = Time.realtimeSinceStartup; int lastMark = -1, st0 = 0, fr0 = 0, lose = 0, shotN = 0; bool tapStone = false, bought = false;
+                while (Time.realtimeSinceStartup - t0 < 200)
+                {
+                    if (ModalOpen) { if (st.status == "win") break; if (st.status == "lose") { lose++; TLog("关" + (lv + 1) + " 输了（" + (stormLose ? "风暴" : "泊位满") + "）石船 " + stones.Count); Revive(true); await Fx.SleepKeep(300); continue; } HideModal(); }
+                    if (pirMark >= 0 && pirMark != lastMark) { lastMark = pirMark; if (shotN < 4) { await Fx.SleepKeep(350); await Shot(dir, "p" + (lv + 1) + "_mark" + (shotN++)); } }
+                    if (pirMark < 0) lastMark = -1;
+                    if (pirStoned != st0) { st0 = pirStoned; if (shotN < 12) { float sp0 = Fx.Speed; Fx.SetSpeed(0.2f); for (int fi = 0; fi < 12; fi++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, "p" + (lv + 1) + "_fire" + pirStoned + "_" + fi.ToString("00") + ".png")); await Fx.SleepKeep(130); } Fx.SetSpeed(sp0); await Fx.SleepKeep(500); await Shot(dir, "p" + (lv + 1) + "_stone" + pirStoned); shotN++; } TLog("关" + (lv + 1) + " 石化 #" + pirStoned + "，石船 " + stones.Count + "，被挡住能走的船 " + Rules.InLot(L, st).Count(x => Rules.CanGo(L, st, x))); }
+                    if (pirFreed != fr0) { fr0 = pirFreed; await Shot(dir, "p" + (lv + 1) + "_free" + pirFreed); TLog("关" + (lv + 1) + " 解封 #" + pirFreed + "，石船还有 " + stones.Count); }
+                    // 点一下石船（应该点不动、抖一下），再花钱解封一次
+                    if (stones.Count > 0 && !tapStone) { tapStone = true; int sb = stones.Keys.First(); var r = Rules.Tap(L, st.Clone(), sb, null); TLog("点石船 → " + r); TapAt(cam.WorldToScreenPoint(boatV[sb].g.transform.position + Vector3.up * 0.3f)); await Fx.SleepKeep(150); await Shot(dir, "p" + (lv + 1) + "_tapstone"); }
+                    if (stones.Count > 0 && !bought && Time.realtimeSinceStartup - t0 > 60) { bought = true; int c0 = save.coins; UnlockBuy(); TLog("立刻解封：金币 " + c0 + " → " + save.coins); }
+                    if (st.status == "play")
+                    {
+                        int b = -1;
+                        if (pirMark >= 0 && rng.Next() < saveP && Rules.CanGo(L, st, pirMark)) b = pirMark;
+                        if (b < 0) b = Rules.BestMove(L, st, null, 0);
+                        if (b >= 0 && boatV[b] != null && boatV[b].state == "lot") TapAt(cam.WorldToScreenPoint(boatV[b].g.transform.position + Vector3.up * 0.3f));
+                    }
+                    await Fx.SleepKeep(pace);
+                }
+                TLog("关" + (lv + 1) + " 状态=" + st.status + " 海盗来了 " + pirVisits + " 次，救下 " + pirSaved + "，石化 " + pirStoned + "，解封 " + pirFreed + "，还剩石船 " + stones.Count + "，输 " + lose + " 次，用时 " + (Time.realtimeSinceStartup - t0).ToString("0") + "s");
+            }
+            save.devPirate = 0; save.devBounty = false; save.Persist();
+        }
+
         async Task Shot(string dir, string name)
         {
             await Fx.SleepKeep(120);
@@ -557,6 +636,8 @@ namespace Tide
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHome") >= 0) { await Fx.SleepKeep(800); await HomeShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideMech") >= 0) { HideTitle(); SetHud(true); await MechShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideCombo") >= 0) { await ComboTest(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideBounty") >= 0) { await BountyTest(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tidePirate") >= 0) { await PirateTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideStuck") >= 0) { await StuckTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideLock") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await LockShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHeli") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await HeliShots(dir); return; }

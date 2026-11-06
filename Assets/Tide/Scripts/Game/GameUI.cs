@@ -465,11 +465,11 @@ namespace Tide
             });
         }
 
-        void FlyCoin(Vector3 world, Action cb)
+        void FlyCoin(Vector3 world, Action cb) => FlyCoinFrom(ToCanvas(cam.WorldToScreenPoint(world)), cb);
+        void FlyCoinFrom(Vector2 p0, Action cb)
         {
             var r = OnCanvas("fly"); r.sizeDelta = new Vector2(22, 22);
             CoinIcon(r, new Vector2(11, 0), 22);
-            var p0 = ToCanvas(cam.WorldToScreenPoint(world));
             var c = new Vector3[4]; ui.coinPill.GetWorldCorners(c);
             var p1 = ToCanvas(new Vector3(c[0].x + 22 * ui.scale, (c[0].y + c[1].y) / 2, 0));
             Fx.Run(async () =>

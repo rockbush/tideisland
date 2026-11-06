@@ -442,6 +442,14 @@ namespace Tide
                 if (st != null && stormOn && st.taps == 0 && st.status == "play") { stormMax = stormLeft = STORM_START; UpdateStormBar(); }   // 还没点第一下：当前关马上用新秒数
                 ShowSettings(false);
             }, true, "ffffff", 17, 48);
+            Toggle("悬赏订单（开发）", () => save.devBounty, v => save.devBounty = v, "dev_bounty");   // Bounty.cs；正式包前定下来
+            string[] pirN = { "关", "海盗关", "每关" };
+            MButton(T("海盗（开发）") + sep + T(pirN[Mathf.Clamp(save.devPirate, 0, 2)]), save.devPirate > 0 ? "3fb950" : "b9b0a0", () =>
+            {
+                save.devPirate = (save.devPirate + 1) % 3; save.Persist(); sfx.Play("click");
+                Analytics.Track("setting", "key", "dev_pirate", "value", save.devPirate);
+                ShowSettings(false);
+            }, true, "ffffff", 17, 48);   // Pirate.cs：关 / 只在海盗关（30、40…100、海盗湾）/ 第 8 关起每关（试玩用）
             MSpace(4);
             bool armed = false; Button rb = null;
             rb = MButton(T("清空进度"), "fff8e6", () =>

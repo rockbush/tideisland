@@ -31,7 +31,8 @@ namespace Tide
             new DTask { id = "hard1", group = "hard", kind = "hard", text = "通关 {0} 个困难或超难关", need = 1, icon = "ai_storm", gift = new Gift { coins = 80 } },
             new DTask { id = "clean1", group = "clean", kind = "clean", text = "不用道具不复活通关 {0} 关", need = 1, icon = "starfish", gift = new Gift { coins = 80 } },
             new DTask { id = "chain5", group = "chain", kind = "chain", text = "一口气连着开走 {0} 艘船", need = 5, icon = "ai_dock", gift = new Gift { sort = 1 } },
-            new DTask { id = "build1", group = "build", kind = "build", text = "在小岛上建 {0} 样东西", need = 1, icon = "hut", gift = new Gift { coins = 60 } } };
+            new DTask { id = "build1", group = "build", kind = "build", text = "在小岛上建 {0} 样东西", need = 1, icon = "hut", gift = new Gift { coins = 60 } },
+            new DTask { id = "bounty5", group = "bounty", kind = "bounty", text = "完成 {0} 张悬赏", need = 5, icon = "ai_ring", gift = new Gift { coins = 70 } } };   // 悬赏订单开发开关打开才抽得到
         static readonly Gift TASK_BONUS = new Gift { coins = 100, crane = 1 };
 
         RectTransform signDot, taskDot;
@@ -131,7 +132,7 @@ namespace Tide
         {
             if (save.taskDay == SaveData.Day && save.taskId.Count == 3) return;
             var rnd = new System.Random((int)(SaveData.Day * 7919 % int.MaxValue));
-            var pool = TASKS.Where(t => !(t.kind == "hard" && save.top < 5) && !(t.kind == "chain" && save.top < 3) && !(t.kind == "build" && CurArea >= HOME.areas.Length)).ToList();
+            var pool = TASKS.Where(t => !(t.kind == "bounty" && !save.devBounty) && !(t.kind == "hard" && save.top < 5) && !(t.kind == "chain" && save.top < 3) && !(t.kind == "build" && CurArea >= HOME.areas.Length)).ToList();
             // 洗牌（手写，不用 List.Sort：不同运行时排出来不一样）
             for (int i = pool.Count - 1; i > 0; i--) { int j = rnd.Next(i + 1); var x = pool[i]; pool[i] = pool[j]; pool[j] = x; }
             var pick = new List<DTask>();

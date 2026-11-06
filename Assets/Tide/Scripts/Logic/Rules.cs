@@ -26,6 +26,11 @@
 //   Lot.qx / State.qx 和 queue / q 一一对应，是每个人的能力（0 普通人）；q 怎么重排 qx 就怎么跟着排。
 //   撑杆跳 POLE（各种颜色都有）：他一上船，队伍里（不管排在哪）同色的人撑杆跳上这艘船，把空座补满；人不够就有几个算几个（Vault）
 //
+// 海盗石化（2026-11-05 三玩法融入主线第二步，同天用户改：不再拖走船——拖走会腾出路，反而帮了玩家；改成把船石化在原地）：
+//   工厂出的关卡里没有，画面层 Pirate.cs 在海盗关跑起来时调 Petrify / Unpetrify。
+//   石化的船（State.stone[b] != 0）留在原地照样挡路，点不动（Tap 返回 "stone"，算 Stuck）；直升机照样能吊走（吊走就解封）。
+//   画面层管解封：交赎金马上解，不交就等很久自动解 —— 永远不会无解，只会亏风暴时间。
+//
 // ⚠ 改了 GenLevel（出关卡）里的随机数调用顺序，同一个 seed 就会变成另一关：之后要重跑工厂，重新量难度。
 using System;
 using System.Collections.Generic;
@@ -98,6 +103,7 @@ namespace Tide
         public int gone;         // 离开港湾的船有几艘（海藻用）
         public double t;         // 这局过了几秒（鲨鱼用；画面层每帧更新，工厂按点击节奏推进）。< 0 = 不管鲨鱼（往前看一步时用）
         public string status;
+        public byte[] stone;     // 海盗石化的船（null = 没有海盗；涨潮加船以后可能比 inl 短），见文件头"海盗石化"
 
         public State Clone()
         {
@@ -105,7 +111,8 @@ namespace Tide
             {
                 occ = (short[])occ.Clone(), inl = (byte[])inl.Clone(), load = (byte[])load.Clone(), seen = (byte[])seen.Clone(),
                 arr = (int[])arr.Clone(), hq = new List<int>(hq), berth = new List<int>(berth), freed = new List<int>(freed),
-                q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), wait = new List<int>(wait), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t
+                q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), wait = new List<int>(wait), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t,
+                stone = stone == null ? null : (byte[])stone.Clone()
             };
         }
     }
@@ -212,7 +219,7 @@ namespace Tide
         // ---- 新机制 ----
         public static int WeedLeft(Lot L, State s, int b) => Math.Max(0, L.boats[b].weed - s.gone);
         public static bool Chained(Lot L, State s, int b) { int k = L.boats[b].lockBy; return k >= 0 && s.arr[k] == 0; }   // 钥匙船还没离开港湾
-        public static bool Stuck(Lot L, State s, int b) => WeedLeft(L, s, b) > 0 || Chained(L, s, b);
+        public static bool Stuck(Lot L, State s, int b) => WeedLeft(L, s, b) > 0 || Chained(L, s, b) || Stone(s, b);
         public static bool CanGo(Lot L, State s, int b) => !Stuck(L, s, b) && PathOf(L, s, b).free;
 
         // 出口那条线的横坐标：船头朝 ±u 走的船看 v，朝 ±v 走的看 u
@@ -297,6 +304,7 @@ namespace Tide
         public static string Tap(Lot L, State s, int b, List<Ev> ev)
         {
             if (s.status != "play" || s.inl[b] == 0) return "no";
+            if (Stone(s, b)) return "stone";
             if (Chained(L, s, b)) return "locked";
             if (WeedLeft(L, s, b) > 0) return "weed";
             var p = PathOf(L, s, b);
@@ -322,6 +330,7 @@ namespace Tide
             int k = -1;
             for (int j = 0; j < s.berth.Count; j++) if (s.berth[j] < 0 && (k < 0 || s.freed[j] < s.freed[k])) k = j;
             foreach (int j in L.boats[b].cells) s.occ[j] = -1;
+            if (Stone(s, b)) s.stone[b] = 0;   // 直升机把石化的船吊走了
             s.inl[b] = 0; s.berth[k] = b; s.arr[b] = ++s.clock; s.taps++; s.gone++;
             if (ev != null) ev.Add(new Ev { t = "go", b = b, k = k, how = how });
             if (L.boats[b].sp == 1 && GatherQ(L, s, b) > 0 && ev != null) ev.Add(new Ev { t = "gather", b = b, k = k });
@@ -374,6 +383,24 @@ namespace Tide
             }
             if (s.qi >= s.q.Count) s.status = "win";
             else if (s.berth.IndexOf(-1) < 0) s.status = "lose";
+        }
+
+        // ---- 海盗石化 ----
+        public static bool Stone(State s, int b) => s.stone != null && b < s.stone.Length && s.stone[b] != 0;
+        public static bool Petrify(Lot L, State s, int b, List<Ev> ev)
+        {
+            if (s.status != "play" || s.inl[b] == 0 || Stone(s, b)) return false;
+            if (s.stone == null || s.stone.Length < L.boats.Count) Array.Resize(ref s.stone, L.boats.Count);
+            s.stone[b] = 1;
+            if (ev != null) ev.Add(new Ev { t = "stone", b = b });
+            return true;
+        }
+        public static bool Unpetrify(Lot L, State s, int b, List<Ev> ev)
+        {
+            if (!Stone(s, b)) return false;
+            s.stone[b] = 0;
+            if (ev != null) ev.Add(new Ev { t = "unstone", b = b });
+            return true;
         }
 
         // 彩虹船：在关卡最后加一艘额外的船（不在港湾里，cells 是空的），直接停进空得最久的泊位，然后上人。没空泊位返回 -1

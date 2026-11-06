@@ -222,6 +222,13 @@ namespace Tide
             { "连击奖励：集合船！", "Combo reward: Gather Boat!" }, { "连击奖励：彩虹船！", "Combo reward: Rainbow Boat!" },
             { "每日任务", "Daily Tasks" }, { "{0} 小时 {1} 分后换新任务", "New tasks in {0}h {1}m" }, { "三个都完成再送", "Finish all 3 for a bonus" },
             { "签到", "Daily" }, { "任务", "Tasks" }, { "每日任务 {0}/3", "Daily tasks {0}/3" }, { "（有奖励可以领）", " (rewards waiting!)" },
+            // 悬赏订单（Bounty.cs）
+            { "完成！", "Done!" }, { "连派 {0} 艘", "{0} in a row" }, { "快送 {0} 艘", "Rush {0}" }, { "按顺序派", "In this order" },
+            { "送贵宾上船", "Board the VIP" }, { "泊位全停满", "Fill every dock" }, { "不用道具派 {0} 艘", "{0} boats, no items" },
+            { "悬赏订单（开发）", "Bounties (dev)" }, { "救下 {0} 艘红圈船", "Save {0} marked boats" },
+            // 海盗（Pirate.cs）
+            { "海盗来了！", "Pirates!" }, { "救下！", "Saved!" }, { "赎回中", "Ransom" }, { "队伍在等", "Line is waiting" }, { "立刻赎回", "Buy back" }, { "石化！", "Petrified!" }, { "挡着路", "Blocking" }, { "立刻解封", "Unlock now" }, { "石化 {0} 艘", "{0} stone" },
+            { "海盗（开发）", "Pirates (dev)" }, { "海盗关", "Pirate levels" }, { "每关", "Every level" }, { "完成 {0} 张悬赏", "Complete {0} bounties" },
         };
     }
 }

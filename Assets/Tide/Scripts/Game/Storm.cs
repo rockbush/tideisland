@@ -16,7 +16,7 @@ namespace Tide
         float STORM_START => save.stormStart > 0 ? save.stormStart : 30;   // 开局秒数（复活也回到这个数）：10-30 用户要在设置里调（开发用，SaveData.stormStart）
         float stormLeft, stormMax, stormCap, stormK, flashT, thunderT;
         bool stormOn, stormLose, stormWarned;
-        RectTransform stormRow, rainRoot, stormCloud; Image stormFill, flashImg; Text stormTxt;
+        RectTransform stormRow, rainRoot, stormCloud; Image stormFill, flashImg, pirDim; Text stormTxt;
         readonly List<RectTransform> rain = new List<RectTransform>();
         Material seaMat;
         // 晴天时的灯光（风暴越近越往暗里拉）
@@ -51,6 +51,7 @@ namespace Tide
                 d.anchorMin = d.anchorMax = new Vector2(0.5f, 0.5f); d.sizeDelta = new Vector2(2, 22); d.localRotation = Quaternion.Euler(0, 0, 14);
                 d.gameObject.SetActive(false); rain.Add(d);
             }
+            pirDim = UIKit.Img(rainRoot, "pirDim", null, new Color(0.08f, 0.05f, 0.18f, 0)); pirDim.rectTransform.Stretch(-50, -50, -50, -50); pirDim.raycastTarget = false;   // 海盗劈雷前天暗下来
             flashImg = UIKit.Img(rainRoot, "flash", null, new Color(1, 1, 1, 0)); flashImg.rectTransform.Stretch(-50, -50, -50, -50);
         }
 
@@ -104,7 +105,9 @@ namespace Tide
                 if (thunderT <= 0) { thunderT = Random.Range(5f, 9f); flashT = 1; sfx.Play("thunder", Random.Range(0.85f, 1.1f), 0.3f); }   // 音效整体放大了 3 倍（Synth.SFX_GAIN），雷声是背景气氛，压回原来的响度
             }
             flashT = Mathf.Max(0, flashT - dt * 4);
-            flashImg.color = new Color(1, 1, 1, 0.22f * flashT * flashT);
+            flashImg.color = pirFlash > 0.22f * flashT * flashT ? new Color(0.88f, 0.95f, 1, pirFlash) : new Color(1, 1, 1, 0.22f * flashT * flashT);   // 海盗雷击的白闪更亮（Pirate.cs）
+            pirFlash = Mathf.Max(0, pirFlash - dt * 3.2f);
+            if (pirDim) pirDim.color = new Color(0.08f, 0.05f, 0.18f, 0.34f * pirDark);
         }
 
         void ApplyWeather(float k)
@@ -115,6 +118,8 @@ namespace Tide
             sun.color = Color.Lerp(sun0, UIKit.Hex("c9d5f2"), d);
             float fv = Mathf.Clamp01(feverK - 2);   // 连击狂潮：阳光更暖更亮
             sun.intensity *= 1 + 0.1f * fv; sun.color = Color.Lerp(sun.color, UIKit.Hex("ffe0a0"), 0.25f * fv);
+            d = Mathf.Max(d, 0.85f * pirDark);   // 海盗蓄力劈雷：天一下子暗下来（Pirate.cs）
+            sun.intensity *= 1 - 0.45f * pirDark; sun.color = Color.Lerp(sun.color, UIKit.Hex("b7a8ff"), 0.45f * pirDark);
             RenderSettings.ambientSkyColor = Color.Lerp(sky0, UIKit.Hex("7d8aa3"), d);
             RenderSettings.ambientEquatorColor = Color.Lerp(eq0, UIKit.Hex("6f8496"), d);
             RenderSettings.ambientGroundColor = Color.Lerp(gnd0, UIKit.Hex("5d7385"), d);

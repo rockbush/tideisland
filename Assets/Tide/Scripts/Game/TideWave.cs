@@ -208,6 +208,7 @@ namespace Tide
         {
             if (b >= boatV.Length) System.Array.Resize(ref boatV, L.boats.Count);
             if (b >= mechV.Length) System.Array.Resize(ref mechV, L.boats.Count);
+            if (boatV[b] != null && boatV[b].g) Destroy(boatV[b].g);   // 海盗押着、在海上等位置的船：旧的（藏着的）画面换掉
             AddBoatView(b, true); AddMechView(b); tideInN++;
             var u = boatV[b]; var g = u.g.transform; var h = BoatHome(b); u.bob = false; int t = tok;
             var from = h.pos + new Vector3(0, 0.6f, -1.6f);

@@ -30,6 +30,7 @@ namespace Tide
             if (g.r) g.r.sharedMaterials = Art.GuyMats(g.v, COLS[g.c]); g.hi = false;   // 闪到一半摘掉的，颜色还原
             if (g.pole) Destroy(g.pole); if (g.gold) Destroy(g.gold);
             g.pole = g.gold = null;
+            if (x == CROWN && g.body) { CrownOn(g); return; }   // 悬赏订单的贵宾（Bounty.cs）
             if (x != Rules.POLE || !g.body) return;
             // 杆子竖在招手那只手的另一边（队头招手时不打架），比人高一截；杆头一面同色小旗
             float side = -Art.GuyWaveX(g.v);
