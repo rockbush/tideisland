@@ -31,6 +31,12 @@
 //   石化的船（State.stone[b] != 0）留在原地照样挡路，点不动（Tap 返回 "stone"，算 Stuck）；直升机照样能吊走（吊走就解封）。
 //   画面层管解封：交赎金马上解，不交就等很久自动解 —— 永远不会无解，只会亏风暴时间。
 //
+// 市场爆款三机制（2026-11-06，开发开关；工厂出的关卡里没有，画面层 NewMech.cs 开局时摆上，规则在这里）：
+//   火药船 State.bomb[b]：港湾里再开走 (bomb[b] - gone) 艘船它还没离开港湾就炸（"boom" 事件，画面层扣风暴秒数）；它自己开走 = 拆弹（"defuse"）
+//   封锁海湾 State.sealB/sealC/sealN：一片海湾用浮标绳围起来，里面的船点不动（Tap 返回 "sealed"，算 Stuck），
+//     队伍里 sealC 色的人再上船 sealN 个就解开（"unseal" 事件）。直升机照样能吊里面的船。
+//   时间宝箱：纯画面层（船开出港湾就拿到 +秒数），规则不管。
+//
 // ⚠ 改了 GenLevel（出关卡）里的随机数调用顺序，同一个 seed 就会变成另一关：之后要重跑工厂，重新量难度。
 using System;
 using System.Collections.Generic;
@@ -104,6 +110,9 @@ namespace Tide
         public double t;         // 这局过了几秒（鲨鱼用；画面层每帧更新，工厂按点击节奏推进）。< 0 = 不管鲨鱼（往前看一步时用）
         public string status;
         public byte[] stone;     // 海盗石化的船（null = 没有海盗；涨潮加船以后可能比 inl 短），见文件头"海盗石化"
+        public int[] bomb;       // 火药船：gone 到这个数还在港湾里就炸（0 = 不是火药船；null = 这关没有）
+        public byte[] sealB;     // 封锁海湾里的船（null = 没有封锁 / 已经解开）
+        public int sealC = -1, sealN, sealGot;   // 解封要 sealC 色的人上船 sealN 个；已经上了 sealGot 个
 
         public State Clone()
         {
@@ -112,7 +121,8 @@ namespace Tide
                 occ = (short[])occ.Clone(), inl = (byte[])inl.Clone(), load = (byte[])load.Clone(), seen = (byte[])seen.Clone(),
                 arr = (int[])arr.Clone(), hq = new List<int>(hq), berth = new List<int>(berth), freed = new List<int>(freed),
                 q = new List<int>(q), qx = qx == null ? null : new List<byte>(qx), wait = new List<int>(wait), qi = qi, clock = clock, taps = taps, status = status, gone = gone, t = t,
-                stone = stone == null ? null : (byte[])stone.Clone()
+                stone = stone == null ? null : (byte[])stone.Clone(),
+                bomb = bomb == null ? null : (int[])bomb.Clone(), sealB = sealB == null ? null : (byte[])sealB.Clone(), sealC = sealC, sealN = sealN, sealGot = sealGot
             };
         }
     }
@@ -219,7 +229,7 @@ namespace Tide
         // ---- 新机制 ----
         public static int WeedLeft(Lot L, State s, int b) => Math.Max(0, L.boats[b].weed - s.gone);
         public static bool Chained(Lot L, State s, int b) { int k = L.boats[b].lockBy; return k >= 0 && s.arr[k] == 0; }   // 钥匙船还没离开港湾
-        public static bool Stuck(Lot L, State s, int b) => WeedLeft(L, s, b) > 0 || Chained(L, s, b) || Stone(s, b);
+        public static bool Stuck(Lot L, State s, int b) => WeedLeft(L, s, b) > 0 || Chained(L, s, b) || Stone(s, b) || Sealed(s, b);
         public static bool CanGo(Lot L, State s, int b) => !Stuck(L, s, b) && PathOf(L, s, b).free;
 
         // 出口那条线的横坐标：船头朝 ±u 走的船看 v，朝 ±v 走的看 u
@@ -305,6 +315,7 @@ namespace Tide
         {
             if (s.status != "play" || s.inl[b] == 0) return "no";
             if (Stone(s, b)) return "stone";
+            if (Sealed(s, b)) return "sealed";
             if (Chained(L, s, b)) return "locked";
             if (WeedLeft(L, s, b) > 0) return "weed";
             var p = PathOf(L, s, b);
@@ -333,6 +344,7 @@ namespace Tide
             if (Stone(s, b)) s.stone[b] = 0;   // 直升机把石化的船吊走了
             s.inl[b] = 0; s.berth[k] = b; s.arr[b] = ++s.clock; s.taps++; s.gone++;
             if (ev != null) ev.Add(new Ev { t = "go", b = b, k = k, how = how });
+            Bombs(L, s, b, ev);
             if (L.boats[b].sp == 1 && GatherQ(L, s, b) > 0 && ev != null) ev.Add(new Ev { t = "gather", b = b, k = k });
             Spawn(L, s, ev); Unwait(L, s, ev); Reveal(L, s, ev); Board(L, s, ev);
         }
@@ -356,6 +368,7 @@ namespace Tide
                     }
                 if (best < 0) break;
                 int b = s.berth[best];
+                if (s.sealB != null && c == s.sealC && ++s.sealGot >= s.sealN) { s.sealB = null; if (ev != null) ev.Add(new Ev { t = "unseal", h = c }); }
                 if (ev != null) ev.Add(new Ev { t = "board", b = b, k = best, seat = s.load[b], qi = s.qi });
                 s.load[b]++; s.qi++;
                 if (s.qx != null && s.qx[s.qi - 1] == POLE && s.load[b] < L.boats[b].cap)
@@ -401,6 +414,47 @@ namespace Tide
             s.stone[b] = 0;
             if (ev != null) ev.Add(new Ev { t = "unstone", b = b });
             return true;
+        }
+
+        // ---- 火药船 / 封锁海湾（见文件头"市场爆款三机制"）----
+        public static bool HasBomb(State s, int b) => s.bomb != null && b < s.bomb.Length && s.bomb[b] > 0;
+        public static int BombLeft(State s, int b) => HasBomb(s, b) ? s.bomb[b] - s.gone : 0;
+        public static void SetBomb(Lot L, State s, int b, int n)
+        {
+            if (s.bomb == null || s.bomb.Length < L.boats.Count) Array.Resize(ref s.bomb, L.boats.Count);
+            s.bomb[b] = s.gone + Math.Max(1, n);
+        }
+        // 船 b 刚离开港湾：它是火药船 = 拆弹；别的火药船数到 0 = 炸（炸完就不是火药船了，船还在原地）
+        static void Bombs(Lot L, State s, int b, List<Ev> ev)
+        {
+            if (s.bomb == null) return;
+            if (HasBomb(s, b)) { s.bomb[b] = 0; if (ev != null) ev.Add(new Ev { t = "defuse", b = b }); }
+            for (int x = 0; x < s.bomb.Length; x++)
+                if (HasBomb(s, x) && s.inl[x] != 0 && BombLeft(s, x) <= 0) { s.bomb[x] = 0; if (ev != null) ev.Add(new Ev { t = "boom", b = x }); }
+        }
+        public static bool Sealed(State s, int b) => s.sealB != null && b < s.sealB.Length && s.sealB[b] != 0;
+        public static int SealLeft(State s) => s.sealB == null ? 0 : Math.Max(0, s.sealN - s.sealGot);
+        public static void SetSeal(Lot L, State s, IEnumerable<int> boats, int c, int n)
+        {
+            s.sealB = new byte[L.boats.Count]; foreach (int b in boats) s.sealB[b] = 1;
+            s.sealC = c; s.sealN = n; s.sealGot = 0;
+        }
+        // 至少要开走几艘船才能把 b 开出去（挡路的船、挡挡路船的船……一路数下去，不算 b 自己）；被礁石挡死 / 互相挡 = 999
+        public static int Depth(Lot L, State s, int b)
+        {
+            var need = new HashSet<int>(); var todo = new Stack<int>(); todo.Push(b);
+            while (todo.Count > 0)
+            {
+                int x = todo.Pop(); var B = L.boats[x]; int j = B.cells[B.cells.Length - 1];
+                for (j = StepC(L, j, B.d); j >= 0; j = StepC(L, j, B.d))
+                {
+                    if (L.ins[j] >= 2) return 999;
+                    int o = s.occ[j];
+                    if (o == b) return 999;
+                    if (o >= 0 && o != x && need.Add(o)) { if (need.Count > 40) return 999; todo.Push(o); }
+                }
+            }
+            return need.Count;
         }
 
         // 彩虹船：在关卡最后加一艘额外的船（不在港湾里，cells 是空的），直接停进空得最久的泊位，然后上人。没空泊位返回 -1
@@ -640,6 +694,11 @@ namespace Tide
                 foreach (int x in all) if (hit[x] == b) { int fx = nd.first[L.boats[x].c]; sc += fx == 0 ? 60 : fx < 999 ? Math.Max(4, 28 - fx * 2) : 2; }
                 // 钥匙船：开走就解开锁着的船，那艘船队伍里越急着要，越值得先开
                 foreach (int x in all) if (L.boats[x].lockBy == b) { int fx = nd.first[L.boats[x].c]; sc += fx == 0 ? 50 : fx < 999 ? Math.Max(6, 30 - fx * 2) : 6; }
+                if (s.bomb != null)
+                {
+                    if (HasBomb(s, b)) { int bl = BombLeft(s, b); sc += bl <= 1 ? 160 : bl <= 2 ? 90 : 25; }
+                    foreach (int x in all) if (hit[x] == b && HasBomb(s, x)) { int bl = BombLeft(s, x); sc += bl <= 2 ? 70 : 20; }
+                }
                 if (f != 0) { if (fb <= 1) sc -= 300; else if (fb <= 2) sc -= 120; else if (f > 6) sc -= 40; }
                 outl.Add(new[] { b, sc });
             }
@@ -724,6 +783,19 @@ namespace Tide
                 }
             }
             taps = s.taps;
+            return s.status == "win";
+        }
+
+        // 从 s0 这个局面接着试玩（不改 s0，不计时）：look = 用往前看一步的玩家
+        public static bool PlayoutFrom(Lot L, State s0, Rng r, double noise, bool look)
+        {
+            var s = s0.Clone(); s.t = -1;
+            for (int k = 0; k < 3000 && s.status == "play"; k++)
+            {
+                int b = look ? BestMoveLook(L, s, r, noise) : BestMove(L, s, r, noise);
+                if (b < 0) break;
+                Tap(L, s, b, null);
+            }
             return s.status == "win";
         }
 

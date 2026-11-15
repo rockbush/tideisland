@@ -1,0 +1,28 @@
+{
+  "_说明": "市场爆款三机制（NewMech.cs）。bombSlack=引信比最少要开走的船数多几（普通/困难/超难）；bombGap=炸了或拆了以后隔几艘船再来下一艘；bombMax=一关最多几艘；defuseSecs=拆弹加秒；chestSecs=宝箱加秒；chestN=每关几个宝箱；sealMin/sealMax=封锁船数占比范围；sealNeed=要救的人数=外面同色船座位×它",
+  "bombSlack": [
+    4,
+    4,
+    3
+  ],
+  "bombGap": 3,
+  "bombMax": 3,
+  "bombMinBoats": 5,
+  "bombMaxDepth": 4,
+  "defuseSecs": 3,
+  "chestSecs": 10,
+  "chestN": [
+    1,
+    1,
+    2
+  ],
+  "sealMin": 0.15,
+  "sealMax": 0.5,
+  "sealNeed": 0.7,
+  "sealNoise": 25,
+  "sealMinBoats": 8,
+  "sealMinNeed": 4,
+  "sealTries": 6,
+  "sealRuns": 4,
+  "sealMs": 700
+}

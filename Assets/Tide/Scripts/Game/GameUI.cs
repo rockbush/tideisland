@@ -811,16 +811,22 @@ namespace Tide
             sfx.Play("fail"); sfx.Voice("lose", 0.8f); shake = 0.4f; Haptics.Play(Haptics.Kind.Fail);
             int t = tok; await Fx.Sleep(500); if (t != tok) return;
             if (demo) { demo = false; return; }
-            int left = st.q.Count - st.qi; bool storm = stormLose, can = storm || st.berth.Count < MAXB;
-            Analytics.Track("level_fail", "lv", levelIdx + 1, "try", save.Tries(levelIdx), "sec", LevelSec, "taps", st.taps, "left", left, "why", storm ? "storm" : "full");
+            int left = st.q.Count - st.qi; bool bomb = bombLose, storm = !bomb && stormLose, can = bomb || storm || st.berth.Count < MAXB;
+            Analytics.Track("level_fail", "lv", levelIdx + 1, "try", save.Tries(levelIdx), "sec", LevelSec, "taps", st.taps, "left", left, "why", bomb ? "bomb" : storm ? "storm" : "full");
             Modal(false);
             string lp = storm ? "ai_storm" : "ai_ring";
-            if (Deco(lp))
+            if (!bomb && Deco(lp))
             {
                 var fr = UIKit.Rect("pic", boxContent); fr.gameObject.AddComponent<LayoutElement>().preferredHeight = 96;
                 DecoImg(fr, lp, new Vector2(0.5f, 0.5f), Vector2.zero, 104);
             }
-            if (storm)
+            if (bomb)
+            {
+                ModalTitle(T("火药船爆炸了！"));
+                MText(F("还有 {0} 人没救出来", left), 20, UIKit.Hex("d5392a"));
+                MText(T("火药船没来得及开出港湾，整个港湾都炸烂了"), 13, UIKit.Hex("7a5a3a"));
+            }
+            else if (storm)
             {
                 ModalTitle(T("风暴来了！"), "storm");
                 MText(F("还有 {0} 人没救出来", left), 20, UIKit.Hex("d5392a"));
@@ -833,7 +839,13 @@ namespace Tide
                 MText(T("队头的人要的颜色，码头上一艘都没有"), 13, UIKit.Hex("7a5a3a"));
             }
             if (save.streak > 0 && STREAK_GIFT_ON) MText(F("放弃会断掉 {0} 连胜", save.streak), 14, UIKit.Hex("b5371f"));
-            if (storm)
+            if (bomb)
+            {
+                MText(T("复活：修好港湾，接着玩"), 14, UIKit.Hex("2f6b2a"));
+                MButton(T("看广告复活"), "8a5cff", () => Revive(false));
+                MButton(F("{0} 金币复活", COST["cont"]), "ffb81f", () => Revive(true), save.coins >= COST["cont"], "5a3a10");
+            }
+            else if (storm)
             {
                 MText(F("复活：风暴倒计时回到 {0} 秒", STORM_START), 14, UIKit.Hex("2f6b2a"));
                 MButton(T("看广告复活"), "8a5cff", () => Revive(false));
@@ -852,9 +864,9 @@ namespace Tide
         void Revive(bool coin)
         {
             sfx.Play("click");
-            bool storm = stormLose;
+            bool bomb = bombLose, storm = !bomb && stormLose;
             BLog("复活 " + (coin ? "金币" : "广告"));
-            Action go = () => { HideModal(); usedRevive = true; Analytics.Track("revive", "lv", levelIdx + 1, "pay", coin ? "coin" : "ad", "why", storm ? "storm" : "full"); if (storm) StormRevive(); else OpenBerth(); };
+            Action go = () => { HideModal(); usedRevive = true; Analytics.Track("revive", "lv", levelIdx + 1, "pay", coin ? "coin" : "ad", "why", bomb ? "bomb" : storm ? "storm" : "full"); if (bomb) BombRevive(); else if (storm) StormRevive(); else OpenBerth(); };
             if (coin) { if (save.coins < COST["cont"]) return; save.coins -= COST["cont"]; save.Persist(); go(); }
             else { HideModal(); WatchAd("revive", go); }
         }

@@ -200,6 +200,7 @@ namespace Tide
             StormReset();
             BountyReset();   // 悬赏订单（Bounty.cs，开发开关）
             PirReset();      // 海盗（Pirate.cs，开发开关）
+            NmReset();       // 火药船 / 封锁海湾 / 时间宝箱（NewMech.cs，开发开关）
             var cards = new List<string>();
             if (L.cfg.storm > 0) cards.Add("storm");
             if (L.boats.Any(B => B.len == 3)) cards.Add("yacht");
@@ -509,6 +510,7 @@ namespace Tide
             else if (r == "ok") { sfx.Play("go"); Haptics.Play(Haptics.Kind.Light); }
             else if (r == "weed" || r == "locked") MechRefuse(b, r);
             else if (r == "stone") StoneRefuse(b);   // 海盗石化的船（Pirate.cs）
+            else if (r == "sealed") SealRefuse(b);   // 封锁海湾里的船（NewMech.cs）
             else if (r == "shark") { sfx.Play("bad"); if (tipShark++ < 2) Toast(T("鲨鱼挡在出口！等它游过去再开")); }
             RunEvents(ev);
         }
@@ -535,7 +537,7 @@ namespace Tide
             foreach (var e in ev)
             {
                 var E = e;
-                BountyEv(e); PirEv(e);
+                BountyEv(e); PirEv(e); NmEv(e);
                 if (e.t == "go") { var gate = gates[e.k].p; BLog("派船 船" + E.b + " → 泊位" + E.k + (E.how == "crane" ? "（直升机）" : "") + " 门" + (gate.IsCompleted ? "开" : "关(等船" + gates[E.k].owner + ")")); Fx.Run(() => SailFx(E.b, E.k, E.how, gate)); }
                 else if (e.t == "spawn") Fx.Run(() => SpawnFx(E.b, E.h));
                 else if (e.t == "reveal") Fx.Run(() => RevealFx(E.b));
@@ -549,7 +551,7 @@ namespace Tide
             StormBonus(boarded);   // 每上船一个人风暴推后 0.75 秒（Storm.cs）
             TideCheck();   // 港湾空了、后面还有波 → 涨潮（TideWave.cs）
             if (st.status != "play") { var s = st.status; QueueFx(() => EndFx(s)); }
-            MechSync();
+            MechSync(); NmSync();
             UpdateHUD();
         }
 
@@ -799,7 +801,7 @@ namespace Tide
             await Task.WhenAll(boatV.Where(x => x != null && x.arrive != null).Select(x => x.arrive).ToArray()); if (t != tok) return;
             await Fx.Sleep(450); if (t != tok) return;
             if (s == "win") { await WinFx(); return; }
-            if (st.status == "lose") await LoseFx();
+            if (st.status == "lose") { if (bombLose) await BombLoseFx(); else await LoseFx(); }   // 火药船炸了：先整个港湾炸烂（NewMech.cs）
         }
 
         // ======================================================================
@@ -900,6 +902,7 @@ namespace Tide
                 FeverTick(dt);
                 BountyTick(dt);
                 PirTick(dt);
+                NmTick(dt);
                 MechTick(dt);
             }
             HandleInput();

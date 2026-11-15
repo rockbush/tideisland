@@ -450,6 +450,9 @@ namespace Tide
                 Analytics.Track("setting", "key", "dev_pirate", "value", save.devPirate);
                 ShowSettings(false);
             }, true, "ffffff", 17, 48);   // Pirate.cs：关 / 只在海盗关（30、40…100、海盗湾）/ 第 8 关起每关（试玩用）
+            Toggle("火药船（开发）", () => save.devBomb, v => save.devBomb = v, "dev_bomb");      // NewMech.cs：第 8 关起每关；正式包前定下来
+            Toggle("封锁海湾（开发）", () => save.devSeal, v => save.devSeal = v, "dev_seal");
+            Toggle("时间宝箱（开发）", () => save.devChest, v => save.devChest = v, "dev_chest");
             MSpace(4);
             bool armed = false; Button rb = null;
             rb = MButton(T("清空进度"), "fff8e6", () =>

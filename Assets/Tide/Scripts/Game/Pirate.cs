@@ -168,7 +168,7 @@ namespace Tide
         // 红圈挑哪艘：现在能开、或者挡它的那艘现在能开；不挑特殊船、没揭开的问号船、已经卡住的船
         int PirPick()
         {
-            var lot = Rules.InLot(L, st).Where(b => L.boats[b].sp == 0 && !(L.boats[b].mys != 0 && st.seen[b] == 0) && boatV[b] != null && boatV[b].state == "lot" && !Rules.Stuck(L, st, b)).ToList();
+            var lot = Rules.InLot(L, st).Where(b => L.boats[b].sp == 0 && !(L.boats[b].mys != 0 && st.seen[b] == 0) && boatV[b] != null && boatV[b].state == "lot" && !Rules.Stuck(L, st, b) && !Rules.HasBomb(st, b)).ToList();   // 火药船不挑（石化了就拆不了弹）
             if (lot.Count < 3) return -1;
             var ok = new List<int>();
             foreach (int b in lot)

@@ -228,6 +228,13 @@ namespace Tide
             { "悬赏订单（开发）", "Bounties (dev)" }, { "救下 {0} 艘红圈船", "Save {0} marked boats" },
             // 海盗（Pirate.cs）
             { "海盗来了！", "Pirates!" }, { "救下！", "Saved!" }, { "赎回中", "Ransom" }, { "队伍在等", "Line is waiting" }, { "立刻赎回", "Buy back" }, { "石化！", "Petrified!" }, { "挡着路", "Blocking" }, { "立刻解封", "Unlock now" }, { "石化 {0} 艘", "{0} stone" },
+            { "拆弹成功！", "Defused!" }, { "轰！", "BOOM!" }, { "火药船炸了！风暴提前 {0} 秒", "The powder boat blew up! Storm {0}s sooner" }, { "火药船！再开走 {0} 艘船它就炸，炸了就输，快把它开出去", "Powder boat! It blows after {0} more boats leave - and you lose. Get it out!" },
+            { "轰！！", "KABOOM!" }, { "危险！火药船", "DANGER! Powder boat" }, { "再开走 {0} 艘船它就爆炸\n炸了就输，快把它开出港湾！", "It blows after {0} more boats leave\nIf it blows, you lose - get it out!" },
+            { "再开走 {0} 艘船就爆炸！", "Blows in {0} boats!" }, { "只剩 {0} 艘！快把它开走！", "Only {0} left! Get it out!" }, { "最后 1 艘！快把它开走！", "Last one! Get it out!" }, { "要炸了！", "It's gonna blow!" }, { "火药船爆炸了！", "Powder boat exploded!" }, { "火药船没来得及开出港湾，整个港湾都炸烂了", "It didn't get out in time - the whole harbor is wrecked" },
+            { "复活：修好港湾，接着玩", "Continue: repair the harbor and keep going" }, { "港湾修好了！", "Harbor repaired!" },
+            { "宝箱！", "Treasure!" }, { "海湾解封！", "Bay unlocked!" }, { "解封！", "Open!" }, { "还差 {0} 人", "{0} more" },
+            { "封锁海湾：再救 {0} 个和牌子同色的岛民就打开", "Locked bay: board {0} more islanders of the sign's color" }, { "封锁海湾：救够 {0} 个和牌子同色的岛民，浮标绳就会打开", "Locked bay: board {0} islanders of the sign's color to open it" },
+            { "火药船（开发）", "Powder boat (dev)" }, { "封锁海湾（开发）", "Locked bay (dev)" }, { "时间宝箱（开发）", "Time chest (dev)" },
             { "海盗（开发）", "Pirates (dev)" }, { "海盗关", "Pirate levels" }, { "每关", "Every level" }, { "完成 {0} 张悬赏", "Complete {0} bounties" },
         };
     }

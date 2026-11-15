@@ -593,6 +593,70 @@ namespace Tide
             save.devPirate = 0; save.devBounty = false; save.Persist();
         }
 
+        // 市场爆款三机制（-tideNm 15,39 [-tideNmMode 7：1 火药船 2 封锁海湾 4 时间宝箱] [-tideNmMix 0.3 乱点的比例] [-tidePace 700]）
+        //   开局、点封锁里的船、爆炸（慢动作 12 帧）、拆弹、开宝箱、解封（慢动作）都截图
+        async Task NmTest(string dir)
+        {
+            HideTitle(); SetHud(true);
+            int mode = int.Parse(AutoTest.Arg("-tideNmMode") ?? "7");
+            save.devBomb = (mode & 1) != 0; save.devSeal = (mode & 2) != 0; save.devChest = (mode & 4) != 0; save.devBounty = false; save.devPirate = 0; save.Persist();
+            ShowSettings(); await Fx.SleepKeep(500); await Shot(dir, "n_settings"); HideModal();
+            int pace = int.Parse(AutoTest.Arg("-tidePace") ?? "700"); var rng = new Rng(7);
+            float mix = float.Parse(AutoTest.Arg("-tideNmMix") ?? "0.3", System.Globalization.CultureInfo.InvariantCulture);
+            bool letBoom = AutoTest.Arg("-tideNmBoom") == "1";
+            async Task Slow(string name, int n, int ms) { float sp0 = Fx.Speed; Fx.SetSpeed(0.25f); for (int fi = 0; fi < n; fi++) { ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, name + "_" + fi.ToString("00") + ".png")); await Fx.SleepKeep(ms); } Fx.SetSpeed(sp0); }
+            foreach (int lv in (AutoTest.Arg("-tideNm") ?? "15,39").Split(',').Select(int.Parse))
+            {
+                PlayLevel(lv); await Fx.SleepKeep(1600); save.coins = 500;
+                await Shot(dir, "n" + (lv + 1) + "_start");
+                if (bombV.Count > 0) { float a0 = Time.realtimeSinceStartup; while (!BombAlertShown && Time.realtimeSinceStartup - a0 < 6) await Fx.SleepKeep(30); await Fx.SleepKeep(500); await Shot(dir, "n" + (lv + 1) + "_alert"); await Fx.SleepKeep(2000); await Shot(dir, "n" + (lv + 1) + "_chip"); }
+                bool chip2 = false, chip1 = false;
+                TLog("关" + (lv + 1) + " 开局：火药船 " + string.Join(",", bombV.Keys.Select(b => b + "(引信" + Rules.BombLeft(st, b) + ")")) + " 宝箱 " + string.Join(",", chestV.Keys) + " 封锁 " + (st.sealB != null ? sealList.Count + " 艘 色" + st.sealC + " 要" + st.sealN + "人" : "无"));
+                float t0 = Time.realtimeSinceStartup; int boom0 = 0, def0 = 0, ch0 = 0, un0 = 0, lose = 0; bool tapSeal = false; var shotK = new Dictionary<string, int>();
+                while (Time.realtimeSinceStartup - t0 < 200)
+                {
+                    if (ModalOpen) { if (st.status == "win") break; if (st.status == "lose") { lose++; TLog("关" + (lv + 1) + " 输了（" + (stormLose ? "风暴" : "泊位满") + "）"); Revive(true); await Fx.SleepKeep(300); continue; } HideModal(); }
+                    if (nmBoom != boom0) { boom0 = nmBoom; TLog("关" + (lv + 1) + " 爆炸 #" + nmBoom + " 风暴剩 " + stormLeft.ToString("0.0")); }
+                    if (!chip2 && bombHudB >= 0 && bombHudN == 2) { chip2 = true; await Fx.SleepKeep(400); await Shot(dir, "n" + (lv + 1) + "_chip2"); }
+                    if (!chip1 && bombHudB >= 0 && bombHudN == 1) { chip1 = true; await Fx.SleepKeep(400); await Shot(dir, "n" + (lv + 1) + "_chip1"); }
+                    if (nmDefuse != def0) { def0 = nmDefuse; TLog("关" + (lv + 1) + " 拆弹 #" + nmDefuse); }
+                    if (nmChest != ch0) { ch0 = nmChest; TLog("关" + (lv + 1) + " 宝箱 #" + nmChest + " 风暴剩 " + stormLeft.ToString("0.0")); }
+                    if (nmUnseal != un0) { un0 = nmUnseal; TLog("关" + (lv + 1) + " 解封"); }
+                    if (st.sealB != null && !tapSeal) { tapSeal = true; int sb = sealList.FirstOrDefault(b => st.inl[b] != 0); if (st.inl[sb] != 0) { TLog("点封锁里的船 → " + Rules.Tap(L, st.Clone(), sb, null)); TapAt(cam.WorldToScreenPoint(boatV[sb].g.transform.position + Vector3.up * 0.3f)); await Fx.SleepKeep(200); await Shot(dir, "n" + (lv + 1) + "_tapseal"); } }
+                    if (st.status == "play")
+                    {
+                        var frs = Rules.InLot(L, st).Where(x => Rules.CanGo(L, st, x) && !Rules.HasBomb(st, x)).ToList();
+                        int b = rng.Next() < mix && frs.Count > 0 ? frs[rng.Int(frs.Count)] : Rules.BestMove(L, st, null, 0);
+                        if (letBoom && b >= 0 && Rules.HasBomb(st, b)) b = frs.Count > 0 ? frs[rng.Int(frs.Count)] : -1;
+                        if (b >= 0 && boatV[b] != null && boatV[b].state == "lot")
+                        {
+                            var pe = new List<Ev>(); Rules.Tap(L, st.Clone(), b, pe);
+                            string what = pe.Any(e => e.t == "boom") ? "boom" : pe.Any(e => e.t == "unseal") ? "unseal" : pe.Any(e => e.t == "defuse") ? "defuse" : pe.Any(e => e.t == "go" && chestV.ContainsKey(e.b)) ? "chest" : null;
+                            TapAt(cam.WorldToScreenPoint(boatV[b].g.transform.position + Vector3.up * 0.3f));
+                            if (what != null && (shotK.TryGetValue(what, out int sk) ? sk : 0) < 2)
+                            {
+                                shotK[what] = (shotK.TryGetValue(what, out int sk2) ? sk2 : 0) + 1;
+                                string nm = "n" + (lv + 1) + "_" + what + shotK[what];
+                                if (what == "boom" && st.status == "lose")
+                                {
+                                    float w0 = Time.realtimeSinceStartup; while (!bombCharge && Time.realtimeSinceStartup - w0 < 8) await Fx.SleepKeep(30);
+                                    await Slow(nm, 40, 100); await Fx.SleepKeep(1200); await Shot(dir, nm + "_wreck");
+                                    w0 = Time.realtimeSinceStartup; while (!ModalOpen && Time.realtimeSinceStartup - w0 < 8) await Fx.SleepKeep(50);
+                                    await Fx.SleepKeep(600); await Shot(dir, nm + "_modal"); TLog("关" + (lv + 1) + " 火药船炸了 → 失败弹窗 " + ModalOpen);
+                                    lose++; Revive(true); await Slow(nm + "_rev", 10, 100); await Fx.SleepKeep(800); await Shot(dir, nm + "_revafter");
+                                    TLog("关" + (lv + 1) + " 复活后 状态=" + st.status + " wreck=" + wreck);
+                                }
+                                else { await Slow(nm, what == "boom" || what == "unseal" ? 16 : 10, 90); await Fx.SleepKeep(500); await Shot(dir, nm + "_after"); }
+                            }
+                        }
+                    }
+                    await Fx.SleepKeep(pace);
+                }
+                TLog("关" + (lv + 1) + " 状态=" + st.status + " 火药船 " + bombMade + " 艘（爆 " + nmBoom + " 拆 " + nmDefuse + "）宝箱开 " + nmChest + " 解封 " + nmUnseal + " 输 " + lose + " 次，用时 " + (Time.realtimeSinceStartup - t0).ToString("0") + "s");
+            }
+            save.devBomb = save.devSeal = save.devChest = false; save.Persist();
+        }
+
         async Task Shot(string dir, string name)
         {
             await Fx.SleepKeep(120);
@@ -638,6 +702,7 @@ namespace Tide
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideCombo") >= 0) { await ComboTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideBounty") >= 0) { await BountyTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tidePirate") >= 0) { await PirateTest(dir); return; }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideNm") >= 0) { await NmTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideStuck") >= 0) { await StuckTest(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideLock") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await LockShots(dir); return; }
             if (Array.IndexOf(Environment.GetCommandLineArgs(), "-tideHeli") >= 0) { if (AutoTest.Arg("-tideSlow") != null) Fx.SetSpeed(float.Parse(AutoTest.Arg("-tideSlow"), System.Globalization.CultureInfo.InvariantCulture)); HideTitle(); SetHud(true); await HeliShots(dir); return; }
